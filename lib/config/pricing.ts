@@ -2,13 +2,15 @@
  * Pricing.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- *  PLACEHOLDER AMOUNTS. The build brief says, in brackets:
- *  "[one-time Access tier / monthly Founders tier — confirm final pricing
- *  before writing this]".
+ *  Confirmed by Tapan (2026-09-28): Access $9.99 one-time, Founders $14.99/mo.
  *
  *  The amounts below are for display only and are NOT what Stripe charges.
- *  Stripe charges whatever the price object identified by the env var says, so
- *  a wrong number here is a wrong label, not a wrong charge — but fix both.
+ *  Stripe charges whatever the price object identified by priceIdEnv says.
+ *  STRIPE_PRICE_ACCESS / STRIPE_PRICE_FOUNDERS are still unset as of this
+ *  writing (see HANDOFF.md §6) — until real Stripe Price objects exist at
+ *  $9.99 and $14.99/mo and those env vars point at them, checkout has nothing
+ *  to charge against. Getting the label right here does not by itself make
+ *  the charge right; both need doing.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -32,13 +34,16 @@ export const TIERS: Readonly<Record<Tier, TierConfig>> = {
     id: "access",
     name: "Access",
     blurb: "Pay once. Yours to keep.",
-    displayPrice: "$—", // CLIENT TO CONFIRM
+    displayPrice: "$9.99",
     cadence: "one-time",
     mode: "payment",
     priceIdEnv: "STRIPE_PRICE_ACCESS",
     features: [
       "Unlimited reflective conversations",
-      "Your EchoCompass and EchoMap in your own xTiles workspace",
+      // "Compass" was cut per Todd's skill v3.11 (HANDOFF.md §2.10) — EchoMe
+      // reads the person's own EchoCompass but never writes it. What the app
+      // actually writes is the EchoMap entry.
+      "Your EchoMap, written to your own xTiles workspace",
       "Nothing you say is ever stored in readable form",
     ],
   },
@@ -46,7 +51,7 @@ export const TIERS: Readonly<Record<Tier, TierConfig>> = {
     id: "founders",
     name: "Founders",
     blurb: "Monthly, with the Echo Circle.",
-    displayPrice: "$—/mo", // CLIENT TO CONFIRM
+    displayPrice: "$14.99/mo",
     cadence: "monthly",
     mode: "subscription",
     priceIdEnv: "STRIPE_PRICE_FOUNDERS",
