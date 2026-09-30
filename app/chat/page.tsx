@@ -1,11 +1,7 @@
 import { redirect } from "next/navigation";
 
-import { signOut } from "@/app/(auth)/actions";
-import { localSignOut } from "@/app/(auth)/local-actions";
-import { LOCAL_MODE } from "@/lib/local/mode";
 import { Conversation } from "@/components/chat/Conversation";
 import { BrandHeader } from "@/components/BrandHeader";
-import { ProfileMenu } from "@/components/ProfileMenu";
 import { DecryptionError, SessionKeyDestroyedError } from "@/lib/echo/crypto";
 import { SESSION_CLOSED, SESSION_UNREADABLE } from "@/lib/echo/messages";
 import { sessionStore } from "@/lib/echo/store-factory";
@@ -13,9 +9,6 @@ import { resumeOrStartSession } from "@/lib/echo/sessions";
 import { classifyError } from "@/lib/echo/telemetry";
 import { toDisplayTurns, type DisplayTurn } from "@/lib/echo/transcript";
 import { currentUser } from "@/lib/auth/current-user";
-import { entitlementFor } from "@/lib/billing/entitlements";
-import { TIERS } from "@/lib/config/pricing";
-import { xtiles } from "@/lib/xtiles/factory";
 
 /**
  * Resuming happens here, and it is the whole product in one function: the
@@ -41,24 +34,12 @@ export default async function ChatPage() {
     throw error;
   }
 
-  const [entitlement, xtilesConnected] = await Promise.all([
-    entitlementFor(user.id),
-    (await xtiles()).isConnected(user.id).catch(() => false),
-  ]);
-  const planLabel = entitlement.tier === "none" ? "Free" : TIERS[entitlement.tier].name;
-
   return (
     <>
-      <BrandHeader
-        trailing={
-          <ProfileMenu
-            email={user.email}
-            planLabel={planLabel}
-            xtilesConnected={xtilesConnected}
-            signOutAction={LOCAL_MODE ? localSignOut : signOut}
-          />
-        }
-      />
+      {/* No trailing slot here any more — the account icon is mounted globally
+          (components/AccountMenu.tsx, in app/layout.tsx) so it sits in the same
+          top-right spot on every page, not just this one. */}
+      <BrandHeader />
       <Conversation initialTurns={turns} />
     </>
   );
