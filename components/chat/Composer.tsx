@@ -3,23 +3,27 @@
 import { useCallback, useEffect, useRef, type FormEvent, type KeyboardEvent } from "react";
 
 import { useSpeechInput } from "@/components/chat/useSpeechInput";
+import { VoiceEqualizer } from "@/components/chat/VoiceEqualizer";
 
 interface ComposerProps {
   readonly disabled: boolean;
   readonly onSend: (text: string) => void;
-  /** Told when dictation starts or stops, so the thread can show the equalizer. */
-  readonly onVoiceChange?: (voice: { analyser: AnalyserNode | null } | null) => void;
 }
 
-export function Composer({ disabled, onSend, onVoiceChange }: ComposerProps) {
+export function Composer({ disabled, onSend }: ComposerProps) {
   const textarea = useRef<HTMLTextAreaElement>(null);
   const getTextarea = useCallback(() => textarea.current, []);
   const speech = useSpeechInput(getTextarea);
 
-  const { listening, analyser } = speech;
+  // When dictation ends the text box comes back, so put the cursor in it. Not on
+  // a phone, where focusing would raise the keyboard over what was just said.
+  const wasListening = useRef(false);
   useEffect(() => {
-    onVoiceChange?.(listening ? { analyser } : null);
-  }, [listening, analyser, onVoiceChange]);
+    if (wasListening.current && !speech.listening) {
+      if (!window.matchMedia("(pointer: coarse)").matches) textarea.current?.focus();
+    }
+    wasListening.current = speech.listening;
+  }, [speech.listening]);
 
   function submit(event?: FormEvent) {
     event?.preventDefault();
@@ -53,7 +57,7 @@ export function Composer({ disabled, onSend, onVoiceChange }: ComposerProps) {
     >
       {speech.listening ? (
         <p role="status" className="text-xs leading-relaxed text-ink-soft">
-          Listening… tap the microphone when you&rsquo;re done and your words will appear here. Your
+          Listening… tap the microphone when you&rsquo;re done and your words will appear in the box. Your
           browser&rsquo;s own speech service turns your voice into words, and only the words come
           to EchoMe.
         </p>
@@ -63,6 +67,10 @@ export function Composer({ disabled, onSend, onVoiceChange }: ComposerProps) {
         </p>
       ) : null}
       <div className="flex items-end gap-2">
+        {/* While recording, the message bar becomes the equalizer. The text box is
+            only hidden, never removed: it keeps what was typed, and the spoken
+            words are written into it the moment recording stops. */}
+        {speech.listening ? <VoiceEqualizer analyser={speech.analyser} /> : null}
         <textarea
           ref={textarea}
           name="message"
@@ -70,7 +78,9 @@ export function Composer({ disabled, onSend, onVoiceChange }: ComposerProps) {
           onKeyDown={onKeyDown}
           placeholder="What's on your mind?"
           aria-label="Your message"
-          className="max-h-48 min-h-11 flex-1 resize-none rounded-2xl border border-line bg-raised px-4 py-2.5 text-base leading-relaxed outline-none transition focus:border-ink-soft"
+          className={`max-h-48 min-h-11 flex-1 resize-none rounded-2xl border border-line bg-raised px-4 py-2.5 text-base leading-relaxed outline-none transition focus:border-ink-soft ${
+            speech.listening ? "hidden" : ""
+          }`}
         />
         {speech.supported ? (
           <button

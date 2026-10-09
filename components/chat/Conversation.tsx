@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import { Composer } from "@/components/chat/Composer";
 import { CrisisPanel } from "@/components/chat/CrisisPanel";
 import { Disclaimer } from "@/components/chat/Disclaimer";
-import { VoiceEqualizer } from "@/components/chat/VoiceEqualizer";
 import { EchoDots } from "@/components/EchoLoader";
 import { GENERIC_ERROR } from "@/lib/echo/messages";
 import type { DisplayTurn } from "@/lib/echo/transcript";
@@ -36,13 +35,11 @@ export function Conversation({ initialTurns }: ConversationProps) {
   const [flagged, setFlagged] = useState(false);
   /** Their free conversation has ended, or their access lapsed. */
   const [needsPurchase, setNeedsPurchase] = useState(false);
-  /** Set while someone is dictating; drives the equalizer in the thread. */
-  const [voice, setVoice] = useState<{ analyser: AnalyserNode | null } | null>(null);
 
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [turns, streaming, voice]);
+  }, [turns, streaming]);
 
   async function send(text: string) {
     setNotice(null);
@@ -141,7 +138,6 @@ export function Conversation({ initialTurns }: ConversationProps) {
               <Turn key={turn.id} role={turn.role} text={turn.text} />
             ))}
             {streaming !== null ? <Turn role="assistant" text={streaming} pending /> : null}
-            {voice ? <VoiceEqualizer analyser={voice.analyser} /> : null}
           </div>
 
           {flagged ? <CrisisPanel /> : null}
@@ -171,8 +167,8 @@ export function Conversation({ initialTurns }: ConversationProps) {
         </div>
       </div>
 
-      <div className="sticky bottom-0">
-        <Composer disabled={sending} onSend={send} onVoiceChange={setVoice} />
+      <div className="sticky bottom-0 bg-page">
+        <Composer disabled={sending} onSend={send} />
         <div className="flex items-center justify-center gap-3 pb-1">
           {turns.length > 0 ? (
             <a

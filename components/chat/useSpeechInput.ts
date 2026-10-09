@@ -212,8 +212,6 @@ export function useSpeechInput(getTextarea: () => HTMLTextAreaElement | null) {
       const gap = typed.length > 0 && !/\s$/.test(typed) ? " " : "";
       textarea.value = `${typed}${gap}${words}`;
       textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-      // On a phone, focusing would pop the keyboard up over what they just said.
-      if (!window.matchMedia("(pointer: coarse)").matches) textarea.focus();
     };
 
     active.current = recognition;
