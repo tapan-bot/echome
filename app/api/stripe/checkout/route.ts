@@ -8,6 +8,26 @@ import { GENERIC_ERROR, NOT_SIGNED_IN } from "@/lib/echo/messages";
 import { classifyError } from "@/lib/echo/telemetry";
 import { siteUrl } from "@/lib/site-url";
 
+/**
+ * What to put in the log when checkout fails. Stripe's own error fields (type,
+ * code, which parameter) say exactly what is wrong — "resource_missing" on the
+ * price means a bad price id — and none of them can hold anything a person
+ * wrote. A missing-setting error from our own config code is named too. Anything
+ * else is reported by class only, as everywhere else in this codebase.
+ */
+function describeFailure(error: unknown): string {
+  if (error instanceof Error && error.name.startsWith("Stripe")) {
+    const { code, param, statusCode } = error as Error & {
+      code?: string;
+      param?: string;
+      statusCode?: number;
+    };
+    return [error.name, code, param, statusCode].filter(Boolean).join(" ");
+  }
+  if (error instanceof Error && /is not set/.test(error.message)) return error.message;
+  return classifyError(error);
+}
+
 /** Starts a hosted Stripe Checkout session. Card details never reach us. */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,7 +69,7 @@ export async function POST(request: NextRequest) {
     if (!session.url) throw new Error("Stripe returned no checkout URL.");
     return NextResponse.redirect(session.url, { status: 303 });
   } catch (error) {
-    console.error(`[stripe] checkout failed: ${classifyError(error)}`);
+    console.error(`[stripe] checkout failed: ${describeFailure(error)}`);
     return NextResponse.redirect(`${base}/pricing?checkout=error`, { status: 303 });
   }
 }
