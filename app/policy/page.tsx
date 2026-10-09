@@ -39,6 +39,14 @@ export default function PolicyPage() {
         counts, and error types: never the words themselves.
       </Section>
 
+      <Section title="Voice input">
+        If you use the microphone button, your browser &mdash; not EchoMe &mdash; turns your voice
+        into text, using a speech service run by the browser&rsquo;s maker (for example Google for
+        Chrome, Apple for Safari). Your audio goes to that service under its own privacy terms.
+        EchoMe never receives or records audio; it only receives the words, which are then treated
+        like anything else you write. If you&rsquo;d rather not, just type.
+      </Section>
+
       <Section title="Account and billing">
         Signing in is handled by Supabase; payment, if you choose a paid plan, is handled by
         Stripe. We don&rsquo;t see or store your card details ourselves. Account emails (like a

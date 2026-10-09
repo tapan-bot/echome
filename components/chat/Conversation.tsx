@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Composer } from "@/components/chat/Composer";
 import { CrisisPanel } from "@/components/chat/CrisisPanel";
 import { Disclaimer } from "@/components/chat/Disclaimer";
+import { VoiceEqualizer } from "@/components/chat/VoiceEqualizer";
 import { EchoDots } from "@/components/EchoLoader";
 import { GENERIC_ERROR } from "@/lib/echo/messages";
 import type { DisplayTurn } from "@/lib/echo/transcript";
@@ -35,11 +36,13 @@ export function Conversation({ initialTurns }: ConversationProps) {
   const [flagged, setFlagged] = useState(false);
   /** Their free conversation has ended, or their access lapsed. */
   const [needsPurchase, setNeedsPurchase] = useState(false);
+  /** Set while someone is dictating; drives the equalizer in the thread. */
+  const [voice, setVoice] = useState<{ analyser: AnalyserNode | null } | null>(null);
 
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [turns, streaming]);
+  }, [turns, streaming, voice]);
 
   async function send(text: string) {
     setNotice(null);
@@ -138,6 +141,7 @@ export function Conversation({ initialTurns }: ConversationProps) {
               <Turn key={turn.id} role={turn.role} text={turn.text} />
             ))}
             {streaming !== null ? <Turn role="assistant" text={streaming} pending /> : null}
+            {voice ? <VoiceEqualizer analyser={voice.analyser} /> : null}
           </div>
 
           {flagged ? <CrisisPanel /> : null}
@@ -168,7 +172,7 @@ export function Conversation({ initialTurns }: ConversationProps) {
       </div>
 
       <div className="sticky bottom-0">
-        <Composer disabled={sending} onSend={send} />
+        <Composer disabled={sending} onSend={send} onVoiceChange={setVoice} />
         <div className="flex items-center justify-center gap-3 pb-1">
           {turns.length > 0 ? (
             <a
@@ -204,25 +208,34 @@ function Turn({
     );
   }
 
+  // The reply sits in a bubble on the left, the mirror image of a sent message,
+  // so both sides of the conversation read the same way.
+  const bubble =
+    "max-w-[85%] whitespace-pre-wrap rounded-3xl rounded-bl-lg bg-accent-soft px-4 py-2.5 text-base leading-relaxed shadow-sm ring-1 ring-line";
+
   // Before the first token of a reply arrives, `text` is still empty — show
-  // the waiting dots instead of an empty paragraph with just a cursor.
+  // the waiting dots instead of an empty bubble with just a cursor.
   if (pending && text.length === 0) {
     return (
-      <div className="echo-rise">
-        <EchoDots label="EchoMe is reflecting" />
+      <div className="echo-rise flex justify-start">
+        <div className="rounded-3xl rounded-bl-lg bg-accent-soft px-4 py-3 shadow-sm ring-1 ring-line">
+          <EchoDots label="EchoMe is reflecting" />
+        </div>
       </div>
     );
   }
 
   return (
-    <p className="echo-rise whitespace-pre-wrap text-base leading-relaxed">
-      {text}
-      {pending ? (
-        <span
-          aria-label="EchoMe is replying"
-          className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse bg-ink-soft"
-        />
-      ) : null}
-    </p>
+    <div className="echo-rise flex justify-start">
+      <p className={bubble}>
+        {text}
+        {pending ? (
+          <span
+            aria-label="EchoMe is replying"
+            className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse bg-ink-soft"
+          />
+        ) : null}
+      </p>
+    </div>
   );
 }
