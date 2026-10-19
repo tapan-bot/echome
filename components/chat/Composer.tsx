@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, type FormEvent, type KeyboardEvent } from "react";
 
-import { useSpeechInput } from "@/components/chat/useSpeechInput";
+import { SILENCE_STOP_SECONDS, useSpeechInput } from "@/components/chat/useSpeechInput";
 import { VoiceEqualizer } from "@/components/chat/VoiceEqualizer";
 
 interface ComposerProps {
@@ -57,9 +57,9 @@ export function Composer({ disabled, onSend }: ComposerProps) {
     >
       {speech.listening ? (
         <p role="status" className="text-xs leading-relaxed text-ink-soft">
-          Listening… tap the microphone when you&rsquo;re done and your words will appear in the box. Your
-          browser&rsquo;s own speech service turns your voice into words, and only the words come
-          to EchoMe.
+          Listening… it stops by itself after {SILENCE_STOP_SECONDS} seconds of quiet, or tap the
+          microphone. Your browser&rsquo;s own speech service turns your voice into words, and only
+          the words come to EchoMe.
         </p>
       ) : speech.error ? (
         <p role="alert" className="text-xs leading-relaxed text-warn">
@@ -67,10 +67,11 @@ export function Composer({ disabled, onSend }: ComposerProps) {
         </p>
       ) : null}
       <div className="flex items-end gap-2">
-        {/* While recording, the message bar becomes the equalizer. The text box is
-            only hidden, never removed: it keeps what was typed, and the spoken
-            words are written into it the moment recording stops. */}
-        {speech.listening ? <VoiceEqualizer analyser={speech.analyser} /> : null}
+        {/* While listening, the message bar shows the words as they arrive, with a
+            small level meter. The text box is only hidden, never removed: it keeps
+            what was typed, and the spoken words are written into it the moment
+            listening stops. */}
+        {speech.listening ? <VoiceEqualizer analyser={speech.analyser} live={speech.live} /> : null}
         <textarea
           ref={textarea}
           name="message"
