@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 
 import { AccountMenu } from "@/components/AccountMenu";
+import { ChatButton } from "@/components/ChatButton";
 import { CustomCursor } from "@/components/CustomCursor";
 import { LocalModeBanner } from "@/components/local/LocalModeBanner";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -41,6 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <CustomCursor />
         <ThemeToggle />
         <AccountMenu />
+        <ChatButton />
         {LOCAL_MODE ? <LocalModeBanner /> : null}
         {children}
       </body>

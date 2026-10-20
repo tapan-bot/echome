@@ -116,6 +116,13 @@ html[data-theme="dark"] {
   }
 }
 
+/* Room for the floating Chat button (components/ChatLauncher.tsx), only while it is
+   showing. On <main> rather than <body>: the pages are already a full screen tall,
+   and padding on <body> would make every one of them scroll. */
+html[data-chat-launcher] main {
+  padding-bottom: 6rem;
+}
+
 body {
   background: var(--color-page);
   color: var(--color-ink);
