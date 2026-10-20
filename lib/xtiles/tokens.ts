@@ -16,6 +16,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * The reason to reuse the envelope rather than reach for something simpler is
  * that these tokens grant write access to a person's own workspace. A leaked
  * database should not hand anyone that.
+ *
+ * Also kept inside the encrypted blob: the client id xTiles issued when EchoMe
+ * registered for this person's sign-in (needed to refresh), and the id of their
+ * EchoHub project once found. Neither is a secret, but there is no reason for
+ * either to sit in the clear.
  */
 
 export interface XTilesTokens {
@@ -23,6 +28,10 @@ export interface XTilesTokens {
   readonly refreshToken: string | null;
   readonly expiresAt: Date | null;
   readonly workspaceId: string | null;
+  /** The OAuth client registered for this person's sign-in. */
+  readonly clientId: string;
+  /** Their EchoHub project, once found. */
+  readonly projectId: string | null;
 }
 
 const TABLE = "xtiles_connections";
@@ -49,6 +58,8 @@ export async function saveTokens(userId: string, tokens: XTilesTokens): Promise<
     JSON.stringify({
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
+      clientId: tokens.clientId,
+      projectId: tokens.projectId,
     }),
     dataKey,
     aad(userId),
@@ -94,13 +105,20 @@ export async function readTokens(userId: string): Promise<XTilesTokens | null> {
     dataKey,
     aad(userId),
   );
-  const parsed = JSON.parse(plaintext) as { accessToken: string; refreshToken: string | null };
+  const parsed = JSON.parse(plaintext) as {
+    accessToken: string;
+    refreshToken: string | null;
+    clientId?: string;
+    projectId?: string | null;
+  };
 
   return {
     accessToken: parsed.accessToken,
     refreshToken: parsed.refreshToken,
     expiresAt: data.expires_at ? new Date(data.expires_at) : null,
     workspaceId: data.workspace_id,
+    clientId: parsed.clientId ?? "",
+    projectId: parsed.projectId ?? null,
   };
 }
 

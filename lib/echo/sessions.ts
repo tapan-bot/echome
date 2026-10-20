@@ -105,6 +105,22 @@ export async function saveTranscript(
   await store.savePayload(row.id, row.userId, { encryptedPayload: ciphertext, nonce });
 }
 
+/**
+ * Record what was read from the person's xTiles at the start of this
+ * conversation. Encrypted with the rest of the session; "" records that we
+ * looked and found nothing, so we do not look again on every turn.
+ */
+export async function attachMemory(
+  store: SessionStore,
+  row: SessionRow,
+  transcript: Transcript,
+  memory: string,
+): Promise<Transcript> {
+  const next: Transcript = { ...transcript, memory };
+  await saveTranscript(store, row, next);
+  return next;
+}
+
 /** Append messages and persist in one step. Returns the updated transcript. */
 export async function appendMessages(
   store: SessionStore,

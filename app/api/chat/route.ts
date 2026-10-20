@@ -11,7 +11,7 @@ import {
   UPSTREAM_UNAVAILABLE,
 } from "@/lib/echo/messages";
 import { sessionStore } from "@/lib/echo/store-factory";
-import { appendMessages, resumeOrStartSession } from "@/lib/echo/sessions";
+import { appendMessages, attachMemory, resumeOrStartSession } from "@/lib/echo/sessions";
 import { classifyError, emptyMetrics, recordTurn } from "@/lib/echo/telemetry";
 import { speak } from "@/lib/echo/voice";
 import { accessFor, consumeFreeIntro } from "@/lib/billing/entitlements";
@@ -20,6 +20,7 @@ import { consume } from "@/lib/rate-limit";
 import { speakLocally } from "@/lib/local/voice";
 import { LOCAL_MODE } from "@/lib/local/mode";
 import { currentUser } from "@/lib/auth/current-user";
+import { xtiles } from "@/lib/xtiles/factory";
 
 /** node:crypto is used to decrypt the session, so this cannot run on Edge. */
 export const runtime = "nodejs";
@@ -47,6 +48,34 @@ type WireEvent =
   | { t: "done" };
 
 const MAX_MESSAGE_CHARS = 20_000;
+
+/** Reading their xTiles must never keep someone waiting long for a first reply. */
+const MEMORY_TIMEOUT_MS = 6_000;
+
+/**
+ * What this person keeps in their xTiles, or null. Never throws: if xTiles is
+ * slow, down, disconnected or confused, the conversation simply begins without
+ * it, which is exactly how it behaved before there was a connection at all.
+ * Nothing about the content is logged; only the kind of failure.
+ */
+async function readMemory(userId: string): Promise<string | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const adapter = await xtiles();
+    if (!(await adapter.isConnected(userId))) return null;
+    return await Promise.race([
+      adapter.readMemory(userId),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), MEMORY_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (error) {
+    console.error(`[chat] xTiles memory unavailable: ${classifyError(error)}`);
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 export async function POST(request: NextRequest) {
   const user = await currentUser();
@@ -108,9 +137,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 500 });
   }
 
+  // The first message of a conversation: read what they keep in their own xTiles,
+  // once. It is held only inside the encrypted session, so it goes when the
+  // conversation does. Later turns reuse it without asking xTiles again.
+  let transcript = session.transcript;
+  if (transcript.memory === undefined && transcript.messages.length === 0) {
+    transcript = await attachMemory(store, session.row, transcript, (await readMemory(user.id)) ?? "");
+  }
+
   // Persist their words first. Everything after this point can fail without
   // costing them anything.
-  const withUserTurn = await appendMessages(store, session.row, session.transcript, {
+  const withUserTurn = await appendMessages(store, session.row, transcript, {
     role: "user",
     content: text,
   });
@@ -148,7 +185,7 @@ export async function POST(request: NextRequest) {
         const turn =
           LOCAL_MODE && !process.env.ANTHROPIC_API_KEY
             ? speakLocally(withUserTurn.messages)
-            : speak(withUserTurn.messages, { signal: request.signal });
+            : speak(withUserTurn.messages, { signal: request.signal, memory: withUserTurn.memory });
 
         for await (const event of turn) {
           switch (event.type) {

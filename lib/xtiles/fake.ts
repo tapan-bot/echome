@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { MapPage } from "@/lib/echo/schema";
+import { formatMemory } from "@/lib/xtiles/hub";
 import {
   XTilesWriteError,
   type WriteResult,
@@ -93,6 +94,21 @@ export class FakeXTiles implements XTilesAdapter {
 
   async readExisting(userId: string): Promise<readonly MapPage[]> {
     return this.workspaceFor(this.load(), userId).map;
+  }
+
+  /**
+   * The same shape the real adapter hands back, built from what this fake holds,
+   * so local mode exercises the whole read-then-write loop: close a conversation
+   * keeping an entry, and the next conversation starts with it in view. The
+   * Compass is the person's own and the fake has no way to write one.
+   */
+  async readMemory(userId: string): Promise<string | null> {
+    const pages = this.workspaceFor(this.load(), userId).map;
+    return formatMemory(null, pages.map((page) => page.markdown).join("\n\n"));
+  }
+
+  async checkWorkspace(): Promise<"ready" | "no-hub"> {
+    return "ready";
   }
 
   async write(userId: string, page: MapPage, idempotencyKey: string): Promise<WriteResult> {

@@ -37,6 +37,23 @@ export interface XTilesAdapter {
   readExisting(userId: string): Promise<readonly MapPage[]>;
 
   /**
+   * What the person keeps in their own xTiles, as text for Claude to read at the
+   * start of a conversation: their EchoCompass (written by them) and their
+   * EchoMap (the trail of past conversations). Null when there is nothing to
+   * read. This is the person's own data, handed back to a conversation that is
+   * theirs; it is never logged and never stored anywhere but the encrypted
+   * session.
+   */
+  readMemory(userId: string): Promise<string | null>;
+
+  /**
+   * Whether their workspace is ready for EchoMe: connected AND the EchoHub
+   * project (from the template) can be found. "no-hub" means signed in to
+   * xTiles but the template has not been added yet.
+   */
+  checkWorkspace(userId: string): Promise<"ready" | "no-hub">;
+
+  /**
    * Add one dated entry to the person's EchoMap, as a page (never a task).
    *
    * The EchoCompass is theirs alone: nothing in this interface writes to it.

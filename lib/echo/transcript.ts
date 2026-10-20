@@ -14,6 +14,13 @@ export const TRANSCRIPT_VERSION = 1;
 export interface Transcript {
   readonly v: number;
   readonly messages: Anthropic.Beta.BetaMessageParam[];
+  /**
+   * What the person keeps in their own xTiles (EchoCompass and EchoMap), read
+   * once when this conversation began. "" means "looked, nothing there"; absent
+   * means "not looked yet". It lives only inside the encrypted session payload,
+   * so it is destroyed with the conversation like everything else here.
+   */
+  readonly memory?: string;
 }
 
 export function emptyTranscript(): Transcript {
@@ -42,21 +49,26 @@ export function deserialiseTranscript(plaintext: string): Transcript {
   if (typeof parsed !== "object" || parsed === null) {
     throw new TranscriptFormatError("Session payload is not an object.");
   }
-  const candidate = parsed as { v?: unknown; messages?: unknown };
+  const candidate = parsed as { v?: unknown; messages?: unknown; memory?: unknown };
   if (candidate.v !== TRANSCRIPT_VERSION) {
     throw new TranscriptFormatError(`Unsupported transcript version: ${String(candidate.v)}`);
   }
   if (!Array.isArray(candidate.messages)) {
     throw new TranscriptFormatError("Session payload has no message array.");
   }
-  return { v: TRANSCRIPT_VERSION, messages: candidate.messages as Anthropic.Beta.BetaMessageParam[] };
+  return {
+    v: TRANSCRIPT_VERSION,
+    messages: candidate.messages as Anthropic.Beta.BetaMessageParam[],
+    ...(typeof candidate.memory === "string" ? { memory: candidate.memory } : {}),
+  };
 }
 
 export function withMessages(
   transcript: Transcript,
   ...added: Anthropic.Beta.BetaMessageParam[]
 ): Transcript {
-  return { v: TRANSCRIPT_VERSION, messages: [...transcript.messages, ...added] };
+  // Spread first so anything else the transcript carries (its memory) survives.
+  return { ...transcript, v: TRANSCRIPT_VERSION, messages: [...transcript.messages, ...added] };
 }
 
 /** What the browser needs to render a resumed conversation. */

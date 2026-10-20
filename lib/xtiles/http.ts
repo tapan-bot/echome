@@ -1,7 +1,23 @@
 import "server-only";
 
 import type { MapPage } from "@/lib/echo/schema";
-import { readTokens } from "@/lib/xtiles/tokens";
+import {
+  alreadyThere,
+  buildArguments,
+  formatMemory,
+  parseEntries,
+  parseHubContent,
+  parseProjects,
+  pickHub,
+  TOOL_ADD_TILES,
+  TOOL_GET_PROJECT,
+  TOOL_LIST_PROJECTS,
+  type HubContent,
+  type HubPage,
+} from "@/lib/xtiles/hub";
+import { McpError, McpSession } from "@/lib/xtiles/mcp";
+import { refreshTokens, XTilesAuthError } from "@/lib/xtiles/oauth";
+import { readTokens, saveTokens, type XTilesTokens } from "@/lib/xtiles/tokens";
 import {
   XTilesNotConnectedError,
   XTilesWriteError,
@@ -11,61 +27,236 @@ import {
 } from "@/lib/xtiles/adapter";
 
 /**
- * The real xTiles transport.
+ * The real xTiles transport, over xTiles' MCP server.
  *
- * ─────────────────────────────────────────────────────────────────────────────
- *  NOT IMPLEMENTED — WE HAVE NO XTILES API DOCUMENTATION.
- *
- *  Every method below throws a clear error rather than guessing at endpoints,
- *  payload shapes or auth. That is deliberate: a plausible-looking client
- *  written against an imagined API fails at the worst possible moment — the
- *  first time a real person closes a real conversation — and it fails silently,
- *  because it will happily 404 and look like a network blip.
- *
- *  What IS finished and tested around this file:
- *    - the adapter interface it satisfies       lib/xtiles/adapter.ts
- *    - a working fake with idempotency          lib/xtiles/fake.ts
- *    - encrypted token storage                  lib/xtiles/tokens.ts
- *    - the OAuth connect/callback routes        app/api/xtiles/*
- *    - the closing ritual and its retry path    lib/echo/ritual.ts
- *
- *  TO FINISH THIS FILE you need, from xTiles:
- *    1. the OAuth authorise and token URLs, and the scope needed to write
- *    2. the endpoint that creates or updates a view, and its payload shape
- *    3. whether it honours an idempotency key header — and if not, what to
- *       query to make `write` idempotent by hand
- *    4. the refresh-token semantics and token lifetime
- *
- *  Fill in the four methods. Nothing else in the codebase needs to change.
- * ─────────────────────────────────────────────────────────────────────────────
+ * The member signs in once (lib/xtiles/oauth.ts) and their tokens are kept
+ * encrypted (lib/xtiles/tokens.ts). From then on each operation opens a short
+ * MCP session, finds their EchoHub project, and either reads it or adds one
+ * dated entry to their EchoMap page. EchoMe never writes to the EchoCompass: that
+ * page is the person's own.
  */
 
-const NOT_IMPLEMENTED =
-  "The xTiles HTTP transport is not implemented — see the note at the top of " +
-  "lib/xtiles/http.ts for exactly what is needed from their API.";
+/** Refresh a little early, so a token does not expire mid-operation. */
+const REFRESH_MARGIN_MS = 60_000;
+
+/** Signed in to xTiles, but there is no EchoHub project to work with yet. */
+export class HubNotFoundError extends Error {
+  override readonly name = "HubNotFoundError";
+  constructor() {
+    super("The EchoHub project was not found in this xTiles workspace.");
+  }
+}
+
+interface Hub {
+  readonly projectId: string;
+  readonly compass: HubPage | null;
+  readonly map: HubPage | null;
+}
 
 export class XTilesHttpAdapter implements XTilesAdapter {
   async isConnected(userId: string): Promise<boolean> {
-    // This much works today: a connection exists if we hold usable tokens.
     const tokens = await readTokens(userId);
-    return tokens !== null && (tokens.expiresAt === null || tokens.expiresAt > new Date());
+    if (!tokens) return false;
+    // An expired access token is normal while a refresh token can renew it.
+    return tokens.refreshToken !== null || tokens.expiresAt === null || tokens.expiresAt > new Date();
   }
 
   async identity(userId: string): Promise<XTilesIdentity | null> {
     const tokens = await readTokens(userId);
     if (!tokens) return null;
-    throw new Error(NOT_IMPLEMENTED);
+    return { workspaceId: tokens.projectId ?? "xtiles", displayName: null };
+  }
+
+  async checkWorkspace(userId: string): Promise<"ready" | "no-hub"> {
+    try {
+      await this.withSession(userId, (session, tokens) => this.loadHub(session, tokens, userId));
+      return "ready";
+    } catch (error) {
+      if (error instanceof HubNotFoundError) return "no-hub";
+      throw error;
+    }
+  }
+
+  async readMemory(userId: string): Promise<string | null> {
+    const hub = await this.withSession(userId, (session, tokens) => this.loadHub(session, tokens, userId));
+    return formatMemory(hub.compass?.text ?? null, hub.map?.text ?? null);
   }
 
   async readExisting(userId: string): Promise<readonly MapPage[]> {
-    if (!(await this.isConnected(userId))) throw new XTilesNotConnectedError();
-    throw new Error(NOT_IMPLEMENTED);
+    const hub = await this.withSession(userId, (session, tokens) => this.loadHub(session, tokens, userId));
+    return parseEntries(hub.map?.text ?? "");
   }
 
-  async write(userId: string): Promise<WriteResult> {
-    if (!(await this.isConnected(userId))) throw new XTilesNotConnectedError();
-    // Reported as retryable so the ritual keeps the session alive rather than
-    // treating this as a permanent failure and giving up on the conversation.
-    throw new XTilesWriteError(NOT_IMPLEMENTED, true);
+  async write(userId: string, page: MapPage, _idempotencyKey: string): Promise<WriteResult> {
+    try {
+      return await this.withSession(userId, async (session, tokens) => {
+        const hub = await this.loadHub(session, tokens, userId);
+        if (!hub.map?.id) {
+          throw new McpError("protocol", false, "The EchoMap page was found, but its id could not be read.");
+        }
+        const ref = `${hub.projectId}/${hub.map.id}`;
+
+        // xTiles offers no idempotency key, so a retry checks first: if the entry
+        // already landed, the earlier attempt succeeded and this one is a no-op.
+        if (alreadyThere(hub.map.text, page)) {
+          return { ref, writtenAt: new Date().toISOString() };
+        }
+
+        const tools = await session.requireTools([TOOL_ADD_TILES]);
+        await session.callTool(
+          TOOL_ADD_TILES,
+          buildArguments(tools.get(TOOL_ADD_TILES)!, { viewId: hub.map.id, markdown: page.markdown }),
+        );
+        return { ref, writtenAt: new Date().toISOString() };
+      });
+    } catch (error) {
+      throw toWriteError(error);
+    }
   }
+
+  /**
+   * Something to look at while this is first being connected to a real
+   * workspace. It reports what the tools are and how they answer, for a signed-in
+   * person looking at their own account; it is off unless XTILES_DIAGNOSE is set.
+   */
+  async diagnose(userId: string): Promise<Record<string, unknown>> {
+    return this.withSession(userId, async (session, tokens) => {
+      const tools = await session.listTools();
+      const out: Record<string, unknown> = {
+        tools: tools.map((tool) => ({
+          name: tool.name,
+          inputs: Object.keys(tool.inputSchema?.properties ?? {}),
+          required: tool.inputSchema?.required ?? [],
+        })),
+      };
+      const available = await session.requireTools([TOOL_LIST_PROJECTS, TOOL_GET_PROJECT]);
+      const list = await session.callTool(TOOL_LIST_PROJECTS, buildArguments(available.get(TOOL_LIST_PROJECTS)!, {}));
+      out.projectsReply = list.slice(0, 3000);
+      const hub = pickHub(parseProjects(list));
+      out.hubFound = hub !== null;
+      if (hub) {
+        const content = await session.callTool(
+          TOOL_GET_PROJECT,
+          buildArguments(available.get(TOOL_GET_PROJECT)!, { projectId: hub.id }),
+        );
+        out.projectReply = content.slice(0, 4000);
+        const parsed = parseHubContent(content);
+        out.parsed = {
+          compassFound: parsed.compass !== null,
+          mapFound: parsed.map !== null,
+          mapHasId: parsed.map?.id != null,
+          cursor: parsed.cursor !== null,
+        };
+      }
+      out.projectIdSaved = tokens.projectId !== null;
+      return out;
+    });
+  }
+
+  // -------------------------------------------------------------------------
+
+  /** Find their EchoHub and read the pages EchoMe cares about. */
+  private async loadHub(session: McpSession, tokens: XTilesTokens, userId: string): Promise<Hub> {
+    const tools = await session.requireTools([TOOL_LIST_PROJECTS, TOOL_GET_PROJECT]);
+    const read = async (projectId: string): Promise<HubContent> => {
+      let merged: HubContent = { compass: null, map: null, cursor: null };
+      let cursor: string | undefined;
+      // The project can come back in pages; follow the cursor until both are found.
+      for (let page = 0; page < 5; page += 1) {
+        const text = await session.callTool(
+          TOOL_GET_PROJECT,
+          buildArguments(tools.get(TOOL_GET_PROJECT)!, { projectId, cursor }),
+        );
+        const next = parseHubContent(text);
+        merged = {
+          compass: merged.compass ?? next.compass,
+          map: merged.map ?? next.map,
+          cursor: next.cursor,
+        };
+        if ((merged.compass && merged.map) || !next.cursor) break;
+        cursor = next.cursor;
+      }
+      return merged;
+    };
+
+    // The project id found last time, if any; otherwise look for it.
+    if (tokens.projectId) {
+      const content = await read(tokens.projectId);
+      if (content.compass || content.map) return { projectId: tokens.projectId, ...content };
+      // Stale (deleted or replaced): fall through and look again.
+    }
+
+    const list = await session.callTool(TOOL_LIST_PROJECTS, buildArguments(tools.get(TOOL_LIST_PROJECTS)!, {}));
+    const project = pickHub(parseProjects(list));
+    if (!project) throw new HubNotFoundError();
+
+    const content = await read(project.id);
+    if (!content.compass && !content.map) throw new HubNotFoundError();
+
+    if (tokens.projectId !== project.id) {
+      // Remember it. Failing to is no reason to fail the operation.
+      await saveTokens(userId, { ...tokens, projectId: project.id }).catch(() => undefined);
+    }
+    return { projectId: project.id, ...content };
+  }
+
+  /**
+   * Run something against an open session, with a fresh token. If xTiles refuses
+   * the token once, refresh it and try again; if that fails, the person has to
+   * connect again.
+   */
+  private async withSession<T>(
+    userId: string,
+    work: (session: McpSession, tokens: XTilesTokens) => Promise<T>,
+  ): Promise<T> {
+    let tokens = await readTokens(userId);
+    if (!tokens) throw new XTilesNotConnectedError();
+
+    const expiring = tokens.expiresAt !== null && tokens.expiresAt.getTime() - Date.now() < REFRESH_MARGIN_MS;
+    if (expiring && tokens.refreshToken) tokens = await this.refresh(userId, tokens);
+
+    for (let attempt = 0; ; attempt += 1) {
+      let session: McpSession | null = null;
+      try {
+        session = await McpSession.open(tokens.accessToken);
+        return await work(session, tokens);
+      } catch (error) {
+        const refusedOnce =
+          error instanceof McpError && error.kind === "unauthorized" && attempt === 0 && tokens.refreshToken;
+        if (!refusedOnce) throw error;
+        tokens = await this.refresh(userId, tokens);
+      } finally {
+        await session?.close();
+      }
+    }
+  }
+
+  private async refresh(userId: string, tokens: XTilesTokens): Promise<XTilesTokens> {
+    if (!tokens.refreshToken || !tokens.clientId) throw new XTilesNotConnectedError();
+    try {
+      const fresh = await refreshTokens({ refreshToken: tokens.refreshToken, clientId: tokens.clientId });
+      const next: XTilesTokens = {
+        ...tokens,
+        accessToken: fresh.accessToken,
+        // Some servers rotate the refresh token; keep the new one if given.
+        refreshToken: fresh.refreshToken ?? tokens.refreshToken,
+        expiresAt: fresh.expiresAt,
+      };
+      await saveTokens(userId, next);
+      return next;
+    } catch (error) {
+      // A revoked or expired grant cannot be mended by retrying.
+      if (error instanceof XTilesAuthError && !error.retryable) throw new XTilesNotConnectedError();
+      throw error;
+    }
+  }
+}
+
+/** What the closing ritual needs to know: did the write fail, and is it worth retrying. */
+function toWriteError(error: unknown): Error {
+  if (error instanceof XTilesNotConnectedError || error instanceof XTilesWriteError) return error;
+  if (error instanceof HubNotFoundError) return new XTilesWriteError("no EchoHub project", false);
+  if (error instanceof McpError) return new XTilesWriteError(error.kind, error.retryable);
+  if (error instanceof XTilesAuthError) return new XTilesWriteError(error.code, error.retryable);
+  return new XTilesWriteError("unexpected", true);
 }
