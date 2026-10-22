@@ -2,13 +2,15 @@
  * Pricing.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- *  Confirmed by Tapan (2026-09-28): Access $9.99 one-time, Founders $14.99/mo.
+ *  Confirmed by Tapan (2026-10-22): both plans are monthly subscriptions —
+ *  Access $19.95/mo, Founders $29.95/mo. (Earlier: Access $9.99 one-time and
+ *  Founders $14.99/mo, set on 2026-09-28.)
  *
  *  The amounts below are for display only and are NOT what Stripe charges.
  *  Stripe charges whatever the price object identified by priceIdEnv says.
  *  STRIPE_PRICE_ACCESS / STRIPE_PRICE_FOUNDERS are still unset as of this
  *  writing (see HANDOFF.md §6) — until real Stripe Price objects exist at
- *  $9.99 and $14.99/mo and those env vars point at them, checkout has nothing
+ *  $19.95 and $29.95/mo and those env vars point at them, checkout has nothing
  *  to charge against. Getting the label right here does not by itself make
  *  the charge right; both need doing.
  * ─────────────────────────────────────────────────────────────────────────────
@@ -33,10 +35,10 @@ export const TIERS: Readonly<Record<Tier, TierConfig>> = {
   access: {
     id: "access",
     name: "Access",
-    blurb: "Pay once. Yours to keep.",
-    displayPrice: "$9.99",
-    cadence: "one-time",
-    mode: "payment",
+    blurb: "Monthly. Cancel any time.",
+    displayPrice: "$19.95/mo",
+    cadence: "monthly",
+    mode: "subscription",
     priceIdEnv: "STRIPE_PRICE_ACCESS",
     features: [
       "Unlimited reflective conversations",
@@ -51,7 +53,7 @@ export const TIERS: Readonly<Record<Tier, TierConfig>> = {
     id: "founders",
     name: "Founders",
     blurb: "Monthly, with the Echo Circle.",
-    displayPrice: "$14.99/mo",
+    displayPrice: "$29.95/mo",
     cadence: "monthly",
     mode: "subscription",
     priceIdEnv: "STRIPE_PRICE_FOUNDERS",
