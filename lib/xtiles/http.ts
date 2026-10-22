@@ -8,12 +8,14 @@ import {
   parseEntries,
   parseHubContent,
   parseProjects,
+  listCursor,
   pickHub,
   TOOL_ADD_TILES,
   TOOL_GET_PROJECT,
   TOOL_LIST_PROJECTS,
   type HubContent,
   type HubPage,
+  type Project,
 } from "@/lib/xtiles/hub";
 import { McpError, McpSession } from "@/lib/xtiles/mcp";
 import { refreshTokens, XTilesAuthError } from "@/lib/xtiles/oauth";
@@ -42,7 +44,8 @@ const REFRESH_MARGIN_MS = 60_000;
 /** Signed in to xTiles, but there is no EchoHub project to work with yet. */
 export class HubNotFoundError extends Error {
   override readonly name = "HubNotFoundError";
-  constructor() {
+  /** What was looked at, as counts only: no project or page names, nothing written. */
+  constructor(readonly detail: string = "") {
     super("The EchoHub project was not found in this xTiles workspace.");
   }
 }
@@ -72,7 +75,10 @@ export class XTilesHttpAdapter implements XTilesAdapter {
       await this.withSession(userId, (session, tokens) => this.loadHub(session, tokens, userId));
       return "ready";
     } catch (error) {
-      if (error instanceof HubNotFoundError) return "no-hub";
+      if (error instanceof HubNotFoundError) {
+        console.warn(`[xtiles] workspace check — ${error.detail || "EchoHub not found"}`);
+        return "no-hub";
+      }
       throw error;
     }
   }
@@ -186,12 +192,29 @@ export class XTilesHttpAdapter implements XTilesAdapter {
       // Stale (deleted or replaced): fall through and look again.
     }
 
-    const list = await session.callTool(TOOL_LIST_PROJECTS, buildArguments(tools.get(TOOL_LIST_PROJECTS)!, {}));
-    const project = pickHub(parseProjects(list));
-    if (!project) throw new HubNotFoundError();
+    // The project list can come back in pages too; follow it until the hub shows up.
+    let project: Project | null = null;
+    let listed = 0;
+    let cursor: string | undefined;
+    for (let page = 0; page < 5 && !project; page += 1) {
+      const list = await session.callTool(
+        TOOL_LIST_PROJECTS,
+        buildArguments(tools.get(TOOL_LIST_PROJECTS)!, { cursor }),
+      );
+      const projects = parseProjects(list);
+      listed += projects.length;
+      project = pickHub(projects);
+      const next = listCursor(list);
+      // A tool that ignores the cursor would hand back the same page forever.
+      if (!next || next === cursor) break;
+      cursor = next;
+    }
+    if (!project) throw new HubNotFoundError(`${listed} project(s) listed, none named like EchoHub`);
 
     const content = await read(project.id);
-    if (!content.compass && !content.map) throw new HubNotFoundError();
+    if (!content.compass && !content.map) {
+      throw new HubNotFoundError("EchoHub found, but neither an EchoCompass nor an EchoMap page was in it");
+    }
 
     if (tokens.projectId !== project.id) {
       // Remember it. Failing to is no reason to fail the operation.
@@ -255,8 +278,16 @@ export class XTilesHttpAdapter implements XTilesAdapter {
 /** What the closing ritual needs to know: did the write fail, and is it worth retrying. */
 function toWriteError(error: unknown): Error {
   if (error instanceof XTilesNotConnectedError || error instanceof XTilesWriteError) return error;
-  if (error instanceof HubNotFoundError) return new XTilesWriteError("no EchoHub project", false);
-  if (error instanceof McpError) return new XTilesWriteError(error.kind, error.retryable);
+  if (error instanceof HubNotFoundError) {
+    return new XTilesWriteError(`no EchoHub project${error.detail ? ` (${error.detail})` : ""}`, false);
+  }
+  if (error instanceof McpError) {
+    // Why it failed, for the receipt and the logs. A tool's own failure text is
+    // dropped (everything after the tool's name): it is xTiles' words, and could
+    // echo what we sent.
+    const detail = error.message.replace(/\):.*$/s, ")");
+    return new XTilesWriteError(`${error.kind}: ${detail}`, error.retryable);
+  }
   if (error instanceof XTilesAuthError) return new XTilesWriteError(error.code, error.retryable);
   return new XTilesWriteError("unexpected", true);
 }

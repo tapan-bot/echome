@@ -98,6 +98,12 @@ describe("finding the person's projects", () => {
     expect(pickHub([{ id: "1", name: "EchoMe" }, { id: "3", name: "EchoHub Archive" }])).toBeNull();
     expect(pickHub([])).toBeNull();
   });
+
+  it("forgives case, emoji and punctuation in the hub's name, but not extra words", () => {
+    expect(pickHub([{ id: "1", name: "🧭 EchoHub™" }])?.id).toBe("1");
+    expect(pickHub([{ id: "1", name: "Echo-Hub" }])?.id).toBe("1");
+    expect(pickHub([{ id: "1", name: "My EchoHub" }])).toBeNull();
+  });
 });
 
 describe("reading the EchoCompass and EchoMap", () => {
@@ -117,6 +123,20 @@ describe("reading the EchoCompass and EchoMap", () => {
     // The page's own name is not part of its text, and neighbouring pages stay out.
     expect(hub.map?.text).not.toContain("EchoMap");
     expect(hub.map?.text).not.toContain("echomechat.ai/login");
+  });
+
+  it("finds pages that picked up a decoration, preferring the plain name", () => {
+    const text = JSON.stringify({
+      views: [
+        { id: "v1", name: "🧭 EchoCompass", text: "Sam" },
+        { id: "v2", name: "EchoMap entries 2025", text: "old" },
+        { id: "v3", name: "My EchoMap", text: "new" },
+      ],
+    });
+    const hub = parseHubContent(text);
+    expect(hub.compass?.id).toBe("v1");
+    // Neither is exactly EchoMap, so the shortest name containing it wins.
+    expect(hub.map?.id).toBe("v3");
   });
 
   it("reads them from markdown sections, with the id when one is printed", () => {

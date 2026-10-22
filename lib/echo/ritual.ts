@@ -173,7 +173,12 @@ export async function commitClosing(
       ref = (await xtiles.write(userId, page, receiptId)).ref;
     } catch (error) {
       const retryable = error instanceof XTilesWriteError ? error.retryable : true;
-      await markFailed(receiptId, classifyError(error));
+      // The reason is content-free (see toWriteError), so it can go on the receipt
+      // and into the logs: without it "the write failed" cannot be told apart.
+      const failure =
+        error instanceof XTilesWriteError ? `XTilesWriteError: ${error.reason}` : classifyError(error);
+      console.warn(`[ritual] xTiles write failed — ${failure}`);
+      await markFailed(receiptId, failure);
       // THE SESSION IS NOT DESTROYED. This is the whole recovery path.
       throw new RitualError(
         "I couldn't write this to your xTiles just now, so I haven't ended the conversation. " +

@@ -161,6 +161,32 @@ export function allText(value: unknown, depth = 0): string {
 
 const same = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
 
+/** A name with everything but letters and digits removed, so "🧭 EchoHub™" reads as "echohub". */
+const keyOf = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * The item whose name is `target`, ignoring case, emoji and punctuation
+ * ("🧭 EchoHub™" is EchoHub). With `allowPartial`, failing an exact match, the
+ * shortest name that CONTAINS it ("My EchoMap"). Pages inside the hub can be
+ * decorated that way; the hub itself cannot: "EchoHub Archive" must never be
+ * mistaken for the real thing, because the wrong project gets written to.
+ */
+function bestByName<T>(
+  items: readonly T[],
+  nameOf: (item: T) => string,
+  target: string,
+  allowPartial: boolean,
+): T | null {
+  const wanted = keyOf(target);
+  const exact = items.find((item) => keyOf(nameOf(item)) === wanted);
+  if (exact !== undefined) return exact;
+  if (!allowPartial) return null;
+  const partial = items
+    .filter((item) => keyOf(nameOf(item)).includes(wanted))
+    .sort((a, b) => nameOf(a).length - nameOf(b).length);
+  return partial[0] ?? null;
+}
+
 /** A heading's name without markdown decoration or an id printed beside it. */
 function headingName(text: string): string {
   return text
@@ -212,7 +238,13 @@ export function parseProjects(text: string): Project[] {
  * enough on its own.
  */
 export function pickHub(projects: readonly Project[]): Project | null {
-  return projects.find((project) => same(project.name, HUB_NAME)) ?? null;
+  return bestByName(projects, (project) => project.name, HUB_NAME, false);
+}
+
+/** Whether the project list says there is more of it to fetch, and where from. */
+export function listCursor(text: string): string | null {
+  const json = tryJson(text);
+  return json === undefined ? null : findCursor(json);
 }
 
 export interface HubPage {
@@ -243,11 +275,13 @@ function findCursor(json: unknown): string | null {
 function pageFromMarkdown(text: string, pageName: string): HubPage | null {
   const lines = text.split(/\r?\n/);
   const heading = /^(#{1,6})\s*(.*?)\s*#*\s*$/;
-  const start = lines.findIndex((line) => {
+  const headings = lines.flatMap((line, index) => {
     const match = heading.exec(line);
-    return match !== null && same(headingName(match[2]!), pageName);
+    return match === null ? [] : [{ index, name: headingName(match[2]!) }];
   });
-  if (start === -1) return null;
+  const found = bestByName(headings, (candidate) => candidate.name, pageName, true);
+  if (found === null) return null;
+  const start = found.index;
 
   const level = heading.exec(lines[start]!)![1]!.length;
   let end = lines.length;
@@ -275,7 +309,7 @@ export function parseHubContent(text: string): HubContent {
   if (json !== undefined) {
     const named = collectNamed(json);
     const pageFor = (pageName: string): HubPage | null => {
-      const entry = named.find((candidate) => same(candidate.name, pageName));
+      const entry = bestByName(named, (candidate) => candidate.name, pageName, true);
       if (!entry) return null;
       return { id: entry.id, text: allText({ ...entry.node, name: undefined, title: undefined }).trim() };
     };
