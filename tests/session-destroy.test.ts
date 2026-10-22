@@ -91,6 +91,23 @@ async function seededSession(store: SessionStore) {
   return row;
 }
 
+describe("a conversation left part-way through closing", () => {
+  it("is resumed, not skipped for a new empty one", async () => {
+    const store = new InMemorySessionStore();
+    const first = await resumeOrStartSession(store, USER);
+    await appendMessages(store, first.row, first.transcript, { role: "user", content: CONFESSION });
+
+    // They reached the closing screen, then pressed "Go back".
+    await store.setStatus(first.row.id, USER, "closing");
+
+    const again = await resumeOrStartSession(store, USER);
+    expect(again.row.id).toBe(first.row.id);
+    expect(again.row.status).toBe("open");
+    expect(store.peek(first.row.id)?.status).toBe("open");
+    expect(JSON.stringify(again.transcript)).toContain(CONFESSION);
+  });
+});
+
 describe("a live session", () => {
   it("round-trips a conversation through the store", async () => {
     const store = new InMemorySessionStore();

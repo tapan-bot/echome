@@ -47,6 +47,16 @@ export async function resumeOrStartSession(
     return { row: existing, transcript: readTranscript(existing) };
   }
 
+  // A conversation left part-way through the closing ritual (they pressed "Go
+  // back", or a write to xTiles failed and they returned) is still THEIR
+  // conversation. Without this it would be skipped, an empty one started beside
+  // it, and the person would think their conversation had been lost.
+  const closing = await store.findClosing(userId);
+  if (closing) {
+    await store.setStatus(closing.id, userId, "open");
+    return { row: { ...closing, status: "open" }, transcript: readTranscript(closing) };
+  }
+
   const transcript = emptyTranscript();
   const sessionId = randomUUID();
   const sessionKey = generateSessionKey();

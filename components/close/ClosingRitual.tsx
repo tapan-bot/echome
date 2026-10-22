@@ -113,7 +113,7 @@ export function ClosingRitual() {
           keep — that goes into your own xTiles workspace. Everything else is destroyed, including
           every word either of us wrote.
         </p>
-        <p className="text-ink-soft">There is no way to undo that, and no hurry to do it.</p>
+        <NoGoingBack />
         <div className="mt-2 flex flex-wrap gap-3">
           <Primary onClick={begin}>Show me what you found</Primary>
           <Secondary href="/chat">Not yet</Secondary>
@@ -171,7 +171,9 @@ export function ClosingRitual() {
           </Group>
         ) : null}
 
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <NoGoingBack final />
+
+        <div className="mt-1 flex flex-wrap items-center gap-3">
           <Primary onClick={commit}>
             {kept.size === 0
               ? "End without keeping anything"
@@ -216,6 +218,42 @@ export function ClosingRitual() {
         <Secondary href="/chat">Back to the conversation</Secondary>
       </div>
     </Shell>
+  );
+}
+
+/**
+ * Said before the conversation is ended, not after. Once they commit there is
+ * no chat to return to: the key is destroyed, so nobody can reopen it, including us.
+ * "Go back" is still true up to that moment, and the wording says so.
+ */
+function NoGoingBack({ final = false }: { final?: boolean }) {
+  return (
+    <div
+      role="alert"
+      className="flex gap-3 rounded-xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm leading-relaxed text-ink"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width={20}
+        height={20}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.9}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        className="mt-0.5 shrink-0 text-warn"
+      >
+        <path d="M12 3.5 2.8 19.5h18.4L12 3.5Z" />
+        <path d="M12 10v4.2M12 17h.01" />
+      </svg>
+      <p>
+        <strong className="font-medium">There is no going back.</strong>{" "}
+        {final
+          ? "Once you end this, you can’t return to this conversation or read it again. It’s gone for good, and so is anything you leave unticked. You can still go back now."
+          : "Once you finish, you can’t return to this conversation or read it again. It’s gone for good. There’s no hurry, and you can still choose “Not yet”."}
+      </p>
+    </div>
   );
 }
 
@@ -302,12 +340,26 @@ function Secondary({
 }: {
   href: string;
   children: React.ReactNode;
-  onNavigate?: () => void;
+  onNavigate?: () => Promise<unknown> | void;
 }) {
   return (
     <a
       href={href}
-      onClick={onNavigate}
+      onClick={
+        onNavigate
+          ? async (event) => {
+              // Let the conversation be put back BEFORE the chat page loads, so
+              // the chat finds it open rather than racing the request.
+              event.preventDefault();
+              try {
+                await onNavigate();
+              } catch {
+                // The chat page reopens a closing conversation itself.
+              }
+              window.location.href = href;
+            }
+          : undefined
+      }
       className="rounded-full border border-line px-6 py-2.5 text-base text-ink-soft transition hover:border-accent hover:text-ink"
     >
       {children}
