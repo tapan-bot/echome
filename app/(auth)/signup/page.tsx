@@ -3,6 +3,7 @@ import { localSignIn } from "@/app/(auth)/local-actions";
 import { AuthForm } from "@/components/auth/AuthForm";
 import { AuthTabs } from "@/components/auth/AuthTabs";
 import { OAuthButtons, OrDivider } from "@/components/auth/OAuthButtons";
+import { PoweredBy } from "@/components/PoweredBy";
 import { DISCLAIMER } from "@/lib/echo/messages";
 import { LOCAL_MODE } from "@/lib/local/mode";
 
@@ -31,7 +32,10 @@ export default function SignUpPage() {
       }
       footer={
         // The disclaimer appears at signup as well as persistently in chat.
-        <p className="text-center text-xs leading-relaxed">{DISCLAIMER}</p>
+        <>
+          <p className="text-center text-xs leading-relaxed">{DISCLAIMER}</p>
+          <PoweredBy className="mt-3" />
+        </>
       }
     />
   );

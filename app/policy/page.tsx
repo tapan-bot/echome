@@ -1,4 +1,5 @@
 import { AuthLink } from "@/components/auth/fields";
+import { PoweredBy } from "@/components/PoweredBy";
 
 /**
  * A plain-language description of what actually happens to what someone
@@ -61,6 +62,7 @@ export default function PolicyPage() {
       <p className="text-sm">
         <AuthLink href="/welcome">Back to EchoMe</AuthLink>
       </p>
+      <PoweredBy />
     </main>
   );
 }

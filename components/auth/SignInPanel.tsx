@@ -5,6 +5,7 @@ import { useActionState, useState } from "react";
 import { sendMagicLink, signIn, type AuthState } from "@/app/(auth)/actions";
 import { localSignIn } from "@/app/(auth)/local-actions";
 import { AuthTabs } from "@/components/auth/AuthTabs";
+import { PoweredBy } from "@/components/PoweredBy";
 import { OAuthButtons, OrDivider } from "@/components/auth/OAuthButtons";
 import {
   AuthLink,
@@ -85,6 +86,7 @@ export function SignInPanel({
       )}
 
       <div className="mt-6 text-center text-xs text-ink-soft">{DISCLAIMER_SHORT}</div>
+      <PoweredBy className="mt-3" />
     </AuthShell>
   );
 }

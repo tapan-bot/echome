@@ -1,3 +1,4 @@
+import { PoweredBy } from "@/components/PoweredBy";
 import { currentUser } from "@/lib/auth/current-user";
 import { TIERS } from "@/lib/config/pricing";
 import { DISCLAIMER } from "@/lib/echo/messages";
@@ -68,6 +69,7 @@ export default async function PricingPage({
       </div>
 
       <p className="text-xs leading-relaxed text-ink-soft">{DISCLAIMER}</p>
+      <PoweredBy className="text-left" />
     </main>
   );
 }

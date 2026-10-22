@@ -1,3 +1,4 @@
+import { PoweredBy } from "@/components/PoweredBy";
 import { DISCLAIMER } from "@/lib/echo/messages";
 
 /**
@@ -6,8 +7,9 @@ import { DISCLAIMER } from "@/lib/echo/messages";
  */
 export function Disclaimer() {
   return (
-    <p className="px-4 pb-2 text-center text-xs leading-relaxed text-ink-soft">
-      {DISCLAIMER}
-    </p>
+    <div className="px-4 pb-2">
+      <p className="text-center text-xs leading-relaxed text-ink-soft">{DISCLAIMER}</p>
+      <PoweredBy className="mt-1" />
+    </div>
   );
 }

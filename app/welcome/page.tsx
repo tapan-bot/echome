@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AuthShell } from "@/components/auth/fields";
+import { PoweredBy } from "@/components/PoweredBy";
 import { currentUser } from "@/lib/auth/current-user";
 import { DISCLAIMER } from "@/lib/echo/messages";
 import { xtiles } from "@/lib/xtiles/factory";
@@ -96,6 +97,7 @@ export default async function WelcomePage({
       </div>
 
       <p className="mt-6 text-center text-xs leading-relaxed text-ink-soft">{DISCLAIMER}</p>
+      <PoweredBy className="mt-3" />
     </AuthShell>
   );
 }

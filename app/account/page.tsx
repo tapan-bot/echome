@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { PoweredBy } from "@/components/PoweredBy";
 import { currentUser } from "@/lib/auth/current-user";
 import { entitlementFor } from "@/lib/billing/entitlements";
 import { TIERS } from "@/lib/config/pricing";
@@ -124,6 +125,8 @@ export default async function AccountPage({
           key is destroyed and what you chose to keep lives in your xTiles, not here.
         </p>
       </section>
+
+      <PoweredBy />
     </main>
   );
 }

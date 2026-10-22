@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { signOut } from "@/app/(auth)/actions";
 import { localSignOut } from "@/app/(auth)/local-actions";
+import { PoweredBy } from "@/components/PoweredBy";
 import { currentUser } from "@/lib/auth/current-user";
 import { LOCAL_MODE } from "@/lib/local/mode";
 
@@ -52,6 +53,8 @@ export default async function SettingsPage() {
           </button>
         </form>
       </section>
+
+      <PoweredBy />
     </main>
   );
 }
