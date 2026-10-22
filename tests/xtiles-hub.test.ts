@@ -139,6 +139,31 @@ describe("reading the EchoCompass and EchoMap", () => {
     expect(hub.map?.id).toBe("v3");
   });
 
+  it("finds the pages as the EchoHub template actually titles them: 'EchoHub — EchoMap'", () => {
+    const json = JSON.stringify({
+      views: [
+        { id: "v1", name: "EchoHub — EchoCompass", text: "1. What should I call you? Sam" },
+        { id: "v2", name: "EchoHub — EchoMap", text: "### July 21, 2026 — A made-up entry" },
+      ],
+    });
+    const fromJson = parseHubContent(json);
+    expect(fromJson.compass?.id).toBe("v1");
+    expect(fromJson.map?.id).toBe("v2");
+
+    const fromMarkdown = parseHubContent(
+      [
+        "# EchoHub — EchoCompass",
+        "1. What should I call you? Sam",
+        "# EchoHub — EchoMap",
+        "### July 21, 2026 — A made-up entry",
+        "**Theme:** Made up.",
+      ].join("\n"),
+    );
+    expect(fromMarkdown.compass?.text).toContain("Sam");
+    expect(fromMarkdown.map?.text).toContain("July 21, 2026");
+    expect(fromMarkdown.map?.text).not.toContain("Sam");
+  });
+
   it("reads them from markdown sections, with the id when one is printed", () => {
     const text = [
       "# EchoHub",
