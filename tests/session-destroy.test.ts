@@ -92,6 +92,19 @@ async function seededSession(store: SessionStore) {
 }
 
 describe("a conversation left part-way through closing", () => {
+  it("copes with more than one, resuming the most recent", async () => {
+    const store = new InMemorySessionStore();
+    // Leftovers from the old Go back race: each attempt stranded a closing row.
+    const older = await resumeOrStartSession(store, USER);
+    await store.setStatus(older.row.id, USER, "closing");
+    const newer = await resumeOrStartSession(store, USER); // the old code started this one
+    await store.setStatus(newer.row.id, USER, "closing");
+
+    const again = await resumeOrStartSession(store, USER);
+    expect(again.row.id).toBe(newer.row.id);
+    expect(store.peek(newer.row.id)?.status).toBe("open");
+  });
+
   it("is resumed, not skipped for a new empty one", async () => {
     const store = new InMemorySessionStore();
     const first = await resumeOrStartSession(store, USER);

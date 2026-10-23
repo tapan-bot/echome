@@ -80,6 +80,12 @@ export class PostgresSessionStore implements SessionStore {
       .select(COLUMNS)
       .eq("user_id", userId)
       .eq("status", "closing")
+      // More than one can exist: nothing in the database limits closing rows the way
+      // the unique index limits open ones, and a "Go back" that raced the chat
+      // page used to leave one behind each time. maybeSingle() on several rows is
+      // an error, which crashed the chat. Take the most recent.
+      .order("last_active_at", { ascending: false })
+      .limit(1)
       .maybeSingle<RawRow>();
     if (error) throw error;
     return data ? toRow(data) : null;

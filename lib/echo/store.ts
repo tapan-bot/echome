@@ -75,11 +75,14 @@ export class InMemorySessionStore implements SessionStore {
     return null;
   }
 
+  /** The most recently active closing row, as the Postgres store returns. */
   async findClosing(userId: string): Promise<SessionRow | null> {
+    let latest: SessionRow | null = null;
     for (const row of this.rows.values()) {
-      if (row.userId === userId && row.status === "closing") return row;
+      if (row.userId !== userId || row.status !== "closing") continue;
+      if (latest === null || row.lastActiveAt >= latest.lastActiveAt) latest = row;
     }
-    return null;
+    return latest;
   }
 
   async find(sessionId: string, userId: string): Promise<SessionRow | null> {
