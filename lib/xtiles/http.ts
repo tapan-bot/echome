@@ -38,6 +38,17 @@ import {
  * page is the person's own.
  */
 
+/** The tools whose descriptions the diagnose route prints. */
+const NOTED_TOOLS = new Set([
+  "xtiles_create_project_from_markdown",
+  "xtiles_create_view_from_markdown",
+  "xtiles_create_tiles_from_markdown_by_view",
+  "xtiles_get_project_structure",
+  "xtiles_get_project_content",
+  "xtiles_get_view_content",
+  "xtiles_get_docs",
+]);
+
 /** Refresh a little early, so a token does not expire mid-operation. */
 const REFRESH_MARGIN_MS = 60_000;
 
@@ -134,6 +145,14 @@ export class XTilesHttpAdapter implements XTilesAdapter {
           inputs: Object.keys(tool.inputSchema?.properties ?? {}),
           required: tool.inputSchema?.required ?? [],
         })),
+        // xTiles' own words about how its markdown tools behave: how markdown is
+        // split into pages and tiles, how a workspace is chosen. These are
+        // documentation, not anyone's content. Needed to build the EchoHub setup.
+        toolNotes: Object.fromEntries(
+          tools
+            .filter((tool) => NOTED_TOOLS.has(tool.name))
+            .map((tool) => [tool.name, (tool.description ?? "").slice(0, 2500)]),
+        ),
       };
       const available = await session.requireTools([TOOL_LIST_PROJECTS, TOOL_GET_PROJECT]);
       const list = await session.callTool(TOOL_LIST_PROJECTS, buildArguments(available.get(TOOL_LIST_PROJECTS)!, {}));
