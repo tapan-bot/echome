@@ -111,6 +111,11 @@ export class FakeXTiles implements XTilesAdapter {
     return "ready";
   }
 
+  /** The fake workspace always has its hub. */
+  async createHub(): Promise<"exists"> {
+    return "exists";
+  }
+
   async write(userId: string, page: MapPage, idempotencyKey: string): Promise<WriteResult> {
     if (this.failNextWrite) {
       const { reason, retryable } = this.failNextWrite;

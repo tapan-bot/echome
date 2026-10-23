@@ -249,3 +249,55 @@ describe("keeping the sign-in alive", () => {
     expect(xtiles.state.tokenRequests.length).toBeLessThanOrEqual(1);
   });
 });
+
+describe("setting up the EchoHub", () => {
+  it("creates it from the template when there is none, and can then find it", async () => {
+    xtiles.state.hubPresent = false;
+    connect();
+
+    expect(await adapter.checkWorkspace(USER)).toBe("no-hub");
+    expect(await adapter.createHub(USER)).toBe("created");
+
+    // xTiles' own rules: `#` the project, `##` each page, `###` each tile.
+    const markdown = xtiles.state.createdMarkdown ?? "";
+    expect(markdown).toMatch(/^# EchoHub\n/);
+    expect(markdown).toContain("\n## EchoHub — EchoCompass\n");
+    expect(markdown).toContain("\n## EchoHub — EchoMap\n");
+    expect(markdown).toContain("### 8. What do you want me to gently notice");
+
+    // The project id came back from xTiles and was kept; the hub is now readable.
+    expect(stored().projectId).toBe("p-hub");
+    expect(await adapter.checkWorkspace(USER)).toBe("ready");
+  });
+
+  it("creates nothing when they already have an EchoHub", async () => {
+    connect();
+    expect(await adapter.createHub(USER)).toBe("exists");
+    expect(calls("xtiles_create_project_from_markdown")).toHaveLength(0);
+  });
+
+  it("does not create a second one when a first was made but could not be read back", async () => {
+    // The project we remembered still answers, but its content shows no hub.
+    xtiles.state.emptyContent = true;
+    connect({ projectId: "p-hub" });
+    expect(await adapter.createHub(USER)).toBe("exists");
+    expect(calls("xtiles_create_project_from_markdown")).toHaveLength(0);
+  });
+
+  it("says why when xTiles refuses to create it", async () => {
+    xtiles.state.hubPresent = false;
+    xtiles.state.createFails = true;
+    connect();
+    await expect(adapter.createHub(USER)).rejects.toMatchObject({ name: "McpError", kind: "tool" });
+    expect(calls("xtiles_create_project_from_markdown")).toHaveLength(1);
+  });
+
+  it("finds a page's id from the project structure when the content prints none", async () => {
+    xtiles.state.contentAsMarkdown = true;
+    connect({ projectId: "p-hub" });
+
+    expect(await adapter.write(USER, PAGE, "key-1")).toMatchObject({ ref: "p-hub/v-map" });
+    expect(calls("xtiles_get_project_structure").length).toBeGreaterThan(0);
+    expect(calls("xtiles_create_tiles_from_markdown_by_view")).toHaveLength(1);
+  });
+});

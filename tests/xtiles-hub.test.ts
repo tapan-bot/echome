@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { MapPage } from "@/lib/echo/schema";
 import {
+  parseCreated,
   alreadyThere,
   buildArguments,
   collectNamed,
@@ -262,5 +263,24 @@ describe("what is handed to a conversation", () => {
     expect(text).not.toContain("entry-0 ");
     expect(text).toContain("Older entries are not shown");
     expect(text.length).toBeLessThan(5_000 + 600);
+  });
+});
+
+describe("reading what xTiles says after creating a project", () => {
+  it("reads the ids from JSON", () => {
+    expect(parseCreated(JSON.stringify({ project_id: "proj-12345", view_id: "view-67890", resource_url: "https://x.test/a" }))).toEqual({
+      projectId: "proj-12345",
+      viewId: "view-67890",
+    });
+    expect(parseCreated(JSON.stringify({ result: { projectId: "proj-abcdef" } })).projectId).toBe("proj-abcdef");
+  });
+
+  it("reads them when written out as text", () => {
+    const text = "Created.\n- project_id: proj-12345\n- view_id: `view-67890`";
+    expect(parseCreated(text)).toEqual({ projectId: "proj-12345", viewId: "view-67890" });
+  });
+
+  it("says nothing was found when there is no id", () => {
+    expect(parseCreated("Done.")).toEqual({ projectId: null, viewId: null });
   });
 });

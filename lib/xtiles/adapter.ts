@@ -54,6 +54,12 @@ export interface XTilesAdapter {
   checkWorkspace(userId: string): Promise<"ready" | "no-hub">;
 
   /**
+   * Create the EchoHub (the EchoCompass and EchoMap pages) in their workspace,
+   * from the template. A no-op, answering "exists", if they already have one.
+   */
+  createHub(userId: string): Promise<"created" | "exists">;
+
+  /**
    * Add one dated entry to the person's EchoMap, as a page (never a task).
    *
    * The EchoCompass is theirs alone: nothing in this interface writes to it.

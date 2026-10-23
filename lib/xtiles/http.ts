@@ -5,19 +5,24 @@ import {
   alreadyThere,
   buildArguments,
   formatMemory,
+  idForPage,
+  parseCreated,
   parseEntries,
   parseHubContent,
   parseProjects,
   listCursor,
   pickHub,
   TOOL_ADD_TILES,
+  TOOL_CREATE_PROJECT,
   TOOL_GET_PROJECT,
   TOOL_LIST_PROJECTS,
+  TOOL_STRUCTURE,
   type HubContent,
   type HubPage,
   type Project,
 } from "@/lib/xtiles/hub";
 import { McpError, McpSession } from "@/lib/xtiles/mcp";
+import { COMPASS_PAGE_TITLE, MAP_PAGE_TITLE, hubMarkdown } from "@/lib/xtiles/template";
 import { refreshTokens, XTilesAuthError } from "@/lib/xtiles/oauth";
 import { readTokens, saveTokens, type XTilesTokens } from "@/lib/xtiles/tokens";
 import {
@@ -201,7 +206,7 @@ export class XTilesHttpAdapter implements XTilesAdapter {
         if ((merged.compass && merged.map) || !next.cursor) break;
         cursor = next.cursor;
       }
-      return merged;
+      return this.withPageIds(session, projectId, merged);
     };
 
     // The project id found last time, if any; otherwise look for it.
@@ -240,6 +245,78 @@ export class XTilesHttpAdapter implements XTilesAdapter {
       await saveTokens(userId, { ...tokens, projectId: project.id }).catch(() => undefined);
     }
     return { projectId: project.id, ...content };
+  }
+
+  /**
+   * A page's id is what writing to it needs, and reading a project's content may
+   * not print one. The project's structure lists every page with its id, so when
+   * the content left one out, ask for it there. Anything that goes wrong here
+   * leaves the content as it was: the caller decides whether a missing id matters.
+   */
+  private async withPageIds(session: McpSession, projectId: string, content: HubContent): Promise<HubContent> {
+    const missing = (page: HubPage | null) => page !== null && page.id === null;
+    if (!missing(content.compass) && !missing(content.map)) return content;
+    try {
+      const tools = await session.requireTools([TOOL_STRUCTURE]);
+      const text = await session.callTool(TOOL_STRUCTURE, buildArguments(tools.get(TOOL_STRUCTURE)!, { projectId }));
+      const pages = parseProjects(text);
+      const withId = (page: HubPage | null, title: string): HubPage | null =>
+        page !== null && page.id === null ? { ...page, id: idForPage(pages, title) } : page;
+      return {
+        ...content,
+        compass: withId(content.compass, COMPASS_PAGE_TITLE),
+        map: withId(content.map, MAP_PAGE_TITLE),
+      };
+    } catch {
+      return content;
+    }
+  }
+
+  /**
+   * Set up the member's EchoHub in their own xTiles, from the template. Only ever
+   * when there is none: if one is found, nothing is created. The project's id comes
+   * straight back from xTiles, is kept, and the same code that will later read and
+   * write the hub must be able to find it again before this counts as done.
+   */
+  async createHub(userId: string): Promise<"created" | "exists"> {
+    return this.withSession(userId, async (session, tokens) => {
+      try {
+        await this.loadHub(session, tokens, userId);
+        return "exists";
+      } catch (error) {
+        if (!(error instanceof HubNotFoundError)) throw error;
+      }
+
+      const tools = await session.requireTools([TOOL_CREATE_PROJECT]);
+
+      // A hub created earlier whose content we could not read back must not be
+      // created a second time: if the project we remembered still answers, leave it.
+      if (tokens.projectId) {
+        try {
+          const structure = await session.requireTools([TOOL_STRUCTURE]);
+          await session.callTool(
+            TOOL_STRUCTURE,
+            buildArguments(structure.get(TOOL_STRUCTURE)!, { projectId: tokens.projectId }),
+          );
+          return "exists";
+        } catch {
+          // Gone, or not readable: carry on and create it.
+        }
+      }
+
+      const reply = await session.callTool(
+        TOOL_CREATE_PROJECT,
+        buildArguments(tools.get(TOOL_CREATE_PROJECT)!, { markdown: hubMarkdown() }),
+      );
+      const { projectId } = parseCreated(reply);
+      if (!projectId) {
+        throw new McpError("protocol", false, "The EchoHub was created, but its id could not be read.");
+      }
+      // Remember it before anything else can fail, so a retry finds it.
+      await saveTokens(userId, { ...tokens, projectId });
+      await this.loadHub(session, { ...tokens, projectId }, userId);
+      return "created";
+    });
   }
 
   /**

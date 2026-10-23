@@ -1,5 +1,6 @@
 import { McpError, type ToolInfo } from "@/lib/xtiles/mcp";
 import type { MapPage } from "@/lib/echo/schema";
+import { stripCompassTemplate, stripMapTemplate } from "@/lib/xtiles/template";
 
 /**
  * Making sense of xTiles' tool inputs and outputs.
@@ -21,6 +22,10 @@ import type { MapPage } from "@/lib/echo/schema";
 export const TOOL_LIST_PROJECTS = "xtiles_list_projects";
 export const TOOL_GET_PROJECT = "xtiles_get_project_content";
 export const TOOL_ADD_TILES = "xtiles_create_tiles_from_markdown_by_view";
+/** `#` is the project title, each `##` a page, each `###` a tile (from xTiles' own tool notes). */
+export const TOOL_CREATE_PROJECT = "xtiles_create_project_from_markdown";
+/** Every page of a project with its id: the reliable way to find a page's id. */
+export const TOOL_STRUCTURE = "xtiles_get_project_structure";
 
 /** The project the template creates, and the pages inside it. */
 export const HUB_NAME = "EchoHub";
@@ -247,6 +252,11 @@ export function listCursor(text: string): string | null {
   return json === undefined ? null : findCursor(json);
 }
 
+/** The id of the page called `pageName`, from a list of a project's pages. */
+export function idForPage(pages: readonly Project[], pageName: string): string | null {
+  return bestByName(pages, (page) => page.name, pageName, true)?.id ?? null;
+}
+
 export interface HubPage {
   /** The page's id, when the response gave one. Needed to write to it. */
   readonly id: string | null;
@@ -322,6 +332,47 @@ export function parseHubContent(text: string): HubContent {
   };
 }
 
+/**
+ * The ids xTiles gives back after creating a project: `project_id` and
+ * `view_id` (as JSON, or written out in text). Null for any it does not name.
+ */
+export function parseCreated(text: string): { projectId: string | null; viewId: string | null } {
+  const json = tryJson(text);
+  const pick = (names: readonly string[]): string | null => {
+    const search = (value: unknown, depth: number): string | null => {
+      if (depth > 6 || value === null || typeof value !== "object") return null;
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          const found = search(item, depth + 1);
+          if (found) return found;
+        }
+        return null;
+      }
+      const object = value as Record<string, unknown>;
+      const direct = firstString(object, names);
+      if (direct) return direct;
+      for (const child of Object.values(object)) {
+        const found = search(child, depth + 1);
+        if (found) return found;
+      }
+      return null;
+    };
+    if (json !== undefined) return search(json, 0);
+    for (const name of names) {
+      const match = new RegExp(
+        String.raw`\b${name}\b["'\x60*]*\s*[:=]\s*["'\x60]?([A-Za-z0-9_-]{6,})`,
+        "i",
+      ).exec(text);
+      if (match) return match[1]!;
+    }
+    return null;
+  };
+  return {
+    projectId: pick(["project_id", "projectId"]),
+    viewId: pick(["view_id", "viewId"]),
+  };
+}
+
 /** Pages already on the EchoMap: each "### date — title" heading starts one. */
 export function parseEntries(mapText: string): MapPage[] {
   const pages: MapPage[] = [];
@@ -374,8 +425,10 @@ export function formatMemory(
   map: string | null,
   maxMapChars = 24_000,
 ): string | null {
-  const compassText = compass?.trim() ?? "";
-  let mapText = map?.trim() ?? "";
+  // The template's own words (the purpose, the questions nobody has answered) are
+  // not the person's, and must not reach Claude as though they were.
+  const compassText = stripCompassTemplate(compass ?? "");
+  let mapText = stripMapTemplate(map ?? "");
   if (compassText.length === 0 && mapText.length === 0) return null;
 
   if (mapText.length > maxMapChars) {

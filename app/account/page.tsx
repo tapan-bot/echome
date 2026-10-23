@@ -14,7 +14,11 @@ export const dynamic = "force-dynamic";
 const XTILES_MESSAGES: Readonly<Record<string, string>> = {
   connected: "xTiles is connected, and your EchoHub was found.",
   nohub:
-    "xTiles is connected, but I couldn't find your EchoHub project yet. Add the EchoMe template to your xTiles, then check again.",
+    "xTiles is connected, but I couldn't find your EchoHub project yet. I can set one up for you, or you can add the EchoMe template to your xTiles yourself and check again.",
+  hubcreated:
+    "Your EchoHub is set up in xTiles: an EchoCompass for you to fill in, and an EchoMap that EchoMe will add to.",
+  hubfailed:
+    "I couldn't set up your EchoHub just now. Before you try again, check your xTiles for an EchoHub, so you don't end up with two.",
   denied: "You chose not to allow access, so nothing was connected. You can try again whenever you like.",
   error: "That connection didn't complete. Please try again.",
   disconnected: "xTiles is disconnected. What's already in your xTiles is untouched.",
@@ -30,7 +34,20 @@ export default async function AccountPage({
   if (!user) redirect("/login?next=/account");
 
   const entitlement = await entitlementFor(user.id);
-  const connected = await (await xtiles()).isConnected(user.id).catch(() => false);
+  const adapter = await xtiles();
+  const connected = await adapter.isConnected(user.id).catch(() => false);
+  // Is there an EchoHub to write to? Asked here so a member who is already
+  // connected, but has no hub yet, is offered the setup without having to
+  // reconnect first. A slow or failing xTiles must not hold the page up: any
+  // doubt means "don't know", and nothing is offered on a guess.
+  const workspace: "ready" | "no-hub" | "unknown" =
+    connected && !xtilesStatus
+      ? await Promise.race([
+          adapter.checkWorkspace(user.id),
+          new Promise<"unknown">((resolve) => setTimeout(() => resolve("unknown"), 4000)),
+        ]).catch(() => "unknown" as const)
+      : "unknown";
+  const needsHub = xtilesStatus === "nohub" || xtilesStatus === "hubfailed" || workspace === "no-hub";
   // Where members add the EchoMe template to their xTiles. Set once xTiles has made the link.
   const templateUrl = process.env.XTILES_TEMPLATE_URL ?? null;
 
@@ -78,8 +95,12 @@ export default async function AccountPage({
           <p role="status" className="text-sm leading-relaxed text-ink">
             {XTILES_MESSAGES[xtilesStatus]}
           </p>
+        ) : workspace === "no-hub" ? (
+          <p role="status" className="text-sm leading-relaxed text-ink">
+            {XTILES_MESSAGES.nohub}
+          </p>
         ) : null}
-        {templateUrl && (xtilesStatus === "nohub" || !connected) ? (
+        {templateUrl && (needsHub || !connected) ? (
           <a
             href={templateUrl}
             target="_blank"
@@ -98,9 +119,16 @@ export default async function AccountPage({
             </form>
           ) : (
             <>
-              {xtilesStatus === "nohub" ? (
-                <form action="/api/xtiles/check" method="post">
+              {needsHub ? (
+                <form action="/api/xtiles/setup-hub" method="post">
                   <button type="submit" className="rounded-lg bg-accent px-4 py-2.5 font-medium text-on-accent">
+                    Set up my EchoHub
+                  </button>
+                </form>
+              ) : null}
+              {needsHub ? (
+                <form action="/api/xtiles/check" method="post">
+                  <button type="submit" className="rounded-lg border border-line px-4 py-2.5 text-ink-soft">
                     Check again
                   </button>
                 </form>

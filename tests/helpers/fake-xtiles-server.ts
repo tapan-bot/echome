@@ -29,6 +29,14 @@ export interface FakeXTilesState {
   hubPresent: boolean;
   /** Entries already on the EchoMap page. */
   mapEntries: string[];
+  /** The markdown the last create-project call was given. */
+  createdMarkdown: string | null;
+  /** Answer project reads as markdown with no ids, the way a real reply might. */
+  contentAsMarkdown: boolean;
+  /** Make create-project fail, as a tool refusing would. */
+  createFails: boolean;
+  /** Answer project reads with a project that has no EchoCompass or EchoMap in it. */
+  emptyContent: boolean;
   /** Make the next N MCP posts answer 401, as an expired token would. */
   rejectNext: number;
   sessionDeletes: number;
@@ -73,6 +81,24 @@ const TOOLS = [
       required: ["view_id", "markdown"],
     },
   },
+  {
+    name: "xtiles_create_project_from_markdown",
+    description: "Create a project. `#` is the title, `##` a page, `###` a tile.",
+    inputSchema: {
+      type: "object",
+      properties: { markdown: { type: "string" }, workspaceId: { type: "string" } },
+      required: ["markdown"],
+    },
+  },
+  {
+    name: "xtiles_get_project_structure",
+    description: "Every page of a project, with ids",
+    inputSchema: {
+      type: "object",
+      properties: { project_id: { type: "string" } },
+      required: ["project_id"],
+    },
+  },
   { name: "xtiles_get_current_user", inputSchema: { type: "object", properties: {} } },
 ];
 
@@ -89,6 +115,10 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
     sse: false,
     hubPresent: true,
     mapEntries: [],
+    createdMarkdown: null,
+    contentAsMarkdown: false,
+    createFails: false,
+    emptyContent: false,
     rejectNext: 0,
     sessionDeletes: 0,
     ...initial,
@@ -119,7 +149,7 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
     views: [
       {
         id: "v-compass",
-        name: "EchoCompass",
+        name: "EchoHub — EchoCompass",
         tiles: [
           { title: "Purpose", text: "This isn't a profile. It's a starting place." },
           { title: "What should I call you?", text: "Sam" },
@@ -127,7 +157,7 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
       },
       {
         id: "v-map",
-        name: "EchoMap",
+        name: "EchoHub — EchoMap",
         tiles: [{ title: "Purpose", text: "The trail of becoming." }, ...state.mapEntries.map((entry) => ({ text: entry }))],
       },
     ],
@@ -210,7 +240,49 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
             if (args.project_id !== "p-hub" || !state.hubPresent) {
               return rpcReply(response, message.id, { ...text("Project not found"), isError: true });
             }
+            if (state.emptyContent) return rpcReply(response, message.id, text("# EchoHub\n\n_Nothing here yet_"));
+            if (state.contentAsMarkdown) {
+              return rpcReply(
+                response,
+                message.id,
+                text(
+                  [
+                    "# EchoHub",
+                    "## EchoHub — EchoCompass",
+                    "### Purpose",
+                    "This isn't a profile. It's a starting place.",
+                    "## EchoHub — EchoMap",
+                    "### Purpose",
+                    "The trail of becoming.",
+                    ...state.mapEntries,
+                  ].join("\n\n"),
+                ),
+              );
+            }
             return rpcReply(response, message.id, text(hubContent()));
+          case "xtiles_create_project_from_markdown":
+            if (state.createFails) return rpcReply(response, message.id, { ...text("Could not create"), isError: true });
+            state.createdMarkdown = String(args.markdown);
+            state.hubPresent = true;
+            return rpcReply(
+              response,
+              message.id,
+              text({ project_id: "p-hub", view_id: "v-compass", resource_url: "https://example.test/p-hub" }),
+            );
+          case "xtiles_get_project_structure":
+            if (args.project_id !== "p-hub" || !state.hubPresent) {
+              return rpcReply(response, message.id, { ...text("Project not found"), isError: true });
+            }
+            return rpcReply(
+              response,
+              message.id,
+              text({
+                pages: [
+                  { kind: "PAGE", id: "v-compass", title: "EchoHub — EchoCompass" },
+                  { kind: "PAGE", id: "v-map", title: "EchoHub — EchoMap" },
+                ],
+              }),
+            );
           case "xtiles_create_tiles_from_markdown_by_view":
             if (args.view_id !== "v-map") return rpcReply(response, message.id, { ...text("View not found"), isError: true });
             state.mapEntries.push(String(args.markdown));
