@@ -327,11 +327,39 @@ export function parseHubContent(text: string): HubContent {
     };
     return { compass: pageFor(COMPASS_NAME), map: pageFor(MAP_NAME), cursor: findCursor(json) };
   }
+  const withId = (page: HubPage | null, pageName: string): HubPage | null =>
+    page !== null && page.id === null ? { ...page, id: idByOrder(text, pageName) } : page;
   return {
-    compass: pageFromMarkdown(text, COMPASS_NAME),
-    map: pageFromMarkdown(text, MAP_NAME),
+    compass: withId(pageFromMarkdown(text, COMPASS_NAME), COMPASS_NAME),
+    map: withId(pageFromMarkdown(text, MAP_NAME), MAP_NAME),
     cursor: null,
   };
+}
+
+/**
+ * xTiles reads a project as markdown with the pages' ids in a header line, in the
+ * same order as the pages ("**Views in this page:** id1, id2"), not beside each
+ * heading. When the counts agree, the Nth `##` page has the Nth id.
+ */
+function idByOrder(text: string, pageName: string): string | null {
+  const header = /views in this page:?\*{0,2}[ \t]*([^\n]+)/i.exec(text);
+  if (!header) return null;
+  const ids = header[1]!.split(/[,\s]+/).filter((id) => /^[A-Za-z0-9_-]{8,}$/.test(id));
+
+  const pages = text
+    .split(/\r?\n/)
+    .map((line) => /^##\s+(?!#)(.*?)\s*#*\s*$/.exec(line)?.[1])
+    .filter((name): name is string => name !== undefined)
+    .map(headingName);
+  if (ids.length === 0 || ids.length !== pages.length) return null;
+
+  const found = bestByName(
+    pages.map((name, index) => ({ name, index })),
+    (page) => page.name,
+    pageName,
+    true,
+  );
+  return found === null ? null : (ids[found.index] ?? null);
 }
 
 /**

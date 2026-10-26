@@ -311,3 +311,53 @@ describe("the project list as xTiles really words it", () => {
     expect(parseProjects(text).map((p) => p.name)).toEqual(["EchoHub", "Garden plans", "Budget"]);
   });
 });
+
+describe("a project as xTiles really reads it out", () => {
+  const REAL_SHAPE = [
+    "**Project:** EchoHub",
+    "**Project ID:** 0123456789abcdef01234567",
+    "**Format:** markdown",
+    "**Views in this page:** 0123456789abcdef01234568, 0123456789abcdef01234569",
+    "**End of content reached.**",
+    "",
+    "--- page markdown below (patch matches against this part only) ---",
+    "",
+    "# EchoHub",
+    "",
+    "## EchoHub — EchoCompass",
+    "### Purpose",
+    "",
+    "This isn't a profile. It's a starting place.",
+    "",
+    "### 1. What should I call you?",
+    "",
+    "## EchoHub — EchoMap",
+    "### Purpose",
+    "",
+    "The trail of becoming.",
+    "",
+    "### October 23, 2026 — A made-up entry",
+    "",
+    "**Theme:** Made up.",
+    "",
+  ].join("\n");
+
+  it("finds both pages, and gives each the id that is in the same position", () => {
+    const hub = parseHubContent(REAL_SHAPE);
+    expect(hub.compass?.id).toBe("0123456789abcdef01234568");
+    expect(hub.map?.id).toBe("0123456789abcdef01234569");
+    expect(hub.compass?.text).toContain("What should I call you?");
+    expect(hub.map?.text).toContain("A made-up entry");
+    expect(hub.map?.text).not.toContain("What should I call you?");
+  });
+
+  it("reads the entries on the Map as the tiles they are", () => {
+    const entries = parseEntries(parseHubContent(REAL_SHAPE).map?.text ?? "");
+    expect(entries.map((entry) => entry.heading)).toEqual(["Purpose", "October 23, 2026 — A made-up entry"]);
+  });
+
+  it("gives no id rather than a wrong one when the counts do not agree", () => {
+    const broken = REAL_SHAPE.replace(", 0123456789abcdef01234569", "");
+    expect(parseHubContent(broken).map?.id).toBeNull();
+  });
+});
