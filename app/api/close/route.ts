@@ -29,6 +29,19 @@ import { xtiles } from "@/lib/xtiles/factory";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * The moment the person reached "what to keep", as they sent it, so that a retry
+ * after a failed save writes the same heading. It is only the label on their own
+ * entry, but a time far from now is not believed: anything unreadable, in the
+ * future, or more than two days old is replaced by the server's own clock.
+ */
+function entryTime(value: unknown): Date | undefined {
+  if (typeof value !== "string") return undefined;
+  const sent = new Date(value);
+  const age = Date.now() - sent.getTime();
+  return Number.isNaN(age) || age < -5 * 60_000 || age > 48 * 3_600_000 ? undefined : sent;
+}
+
 export async function POST(request: NextRequest) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: NOT_SIGNED_IN }, { status: 401 });
@@ -39,6 +52,7 @@ export async function POST(request: NextRequest) {
     distillation?: unknown;
     sessionId?: unknown;
     timeZone?: unknown;
+    enteredAt?: unknown;
   };
   try {
     body = await request.json();
@@ -80,7 +94,10 @@ export async function POST(request: NextRequest) {
         body.sessionId,
         keptIds,
         distillation,
-        { timeZone: typeof body.timeZone === "string" ? body.timeZone : undefined },
+        {
+          timeZone: typeof body.timeZone === "string" ? body.timeZone : undefined,
+          now: entryTime(body.enteredAt),
+        },
       );
       return NextResponse.json({ ok: true, ...result });
     }

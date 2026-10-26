@@ -8,6 +8,8 @@ import {
   fieldId,
   filledFields,
   formatEntryDate,
+  formatEntryStamp,
+  formatEntryTime,
   keepOnly,
   MY_REFLECTION,
   parseDistillation,
@@ -169,5 +171,35 @@ describe("choosing what to keep", () => {
 
   it("ignores an id it does not know, and an id for a field that was empty", () => {
     expect(keepOnly({ entry: BRIEF }, ["entry-nonsense", fieldId("moment")]).entry).toBeNull();
+  });
+});
+
+describe("the time on an entry", () => {
+  const afternoon = new Date("2026-09-26T14:35:00Z");
+
+  it("is 24-hour, in the person's own time zone", () => {
+    expect(formatEntryTime(afternoon, "UTC")).toBe("14:35");
+    expect(formatEntryTime(afternoon, "America/Chicago")).toBe("09:35");
+    expect(formatEntryTime(new Date("2026-09-26T21:05:00Z"), "UTC")).toBe("21:05");
+  });
+
+  it("reads midnight as 00:05, never 24:05", () => {
+    expect(formatEntryTime(new Date("2026-09-27T00:05:00Z"), "UTC")).toBe("00:05");
+  });
+
+  it("falls back to UTC for a zone it does not know", () => {
+    expect(formatEntryTime(afternoon, "Not/AZone")).toBe("14:35");
+  });
+
+  it("goes after the date, before the title", () => {
+    expect(formatEntryStamp(afternoon, "UTC")).toBe("September 26, 2026, 14:35");
+    const page = buildMapPage(BRIEF, formatEntryStamp(afternoon, "UTC"));
+    expect(page.heading).toBe(`September 26, 2026, 14:35 — ${BRIEF.title}`);
+    expect(page.markdown.startsWith("### September 26, 2026, 14:35 — ")).toBe(true);
+  });
+
+  it("keeps the date on the person's own day, with the time beside it", () => {
+    const lateEvening = new Date("2026-09-27T02:30:00Z");
+    expect(formatEntryStamp(lateEvening, "America/Chicago")).toBe("September 26, 2026, 21:30");
   });
 });

@@ -8,7 +8,7 @@ import { createReceipt, markFailed, markWritten } from "@/lib/echo/receipts";
 import {
   buildMapPage,
   countFields,
-  formatEntryDate,
+  formatEntryStamp,
   keepOnly,
   type Distillation,
 } from "@/lib/echo/schema";
@@ -167,7 +167,7 @@ export async function commitClosing(
     try {
       const page = buildMapPage(
         kept.entry,
-        formatEntryDate(options.now ?? new Date(), options.timeZone),
+        formatEntryStamp(options.now ?? new Date(), options.timeZone),
       );
       // The receipt id doubles as the idempotency key: a retry writes once.
       ref = (await xtiles.write(userId, page, receiptId)).ref;

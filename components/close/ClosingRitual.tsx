@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { EchoLoader } from "@/components/EchoLoader";
 import { EchoMark } from "@/components/EchoMark";
-import { fieldId, filledFields, formatEntryDate, type Distillation } from "@/lib/echo/schema";
+import { fieldId, filledFields, formatEntryStamp, type Distillation } from "@/lib/echo/schema";
 
 /**
  * The closing ritual.
@@ -30,6 +30,9 @@ export function ClosingRitual() {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [kept, setKept] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
+  // The moment they reached "what to keep". Sent with every attempt to save, so a
+  // retry writes the same heading and is recognised as the same entry, not a new one.
+  const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [retryable, setRetryable] = useState(true);
 
   // Leaving the page mid-ritual should not leave the conversation stuck in
@@ -67,6 +70,7 @@ export function ClosingRitual() {
     try {
       const result = (await post({ action: "propose" })) as Proposal;
       setProposal(result);
+      setStartedAt(new Date());
       setStage("choosing");
     } catch (error) {
       setMessage((error as Error).message);
@@ -87,6 +91,7 @@ export function ClosingRitual() {
         keptIds: [...kept],
         // So the entry is dated on the person's own day, not the server's.
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        enteredAt: startedAt?.toISOString(),
       });
       setStage("done");
     } catch (error) {
@@ -151,7 +156,7 @@ export function ClosingRitual() {
 
         {entry && fields.length > 0 ? (
           <Group
-            title={`${formatEntryDate(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone)} — ${entry.title}`}
+            title={`${formatEntryStamp(startedAt ?? new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone)} — ${entry.title}`}
             subtitle="Your EchoMap entry for this conversation"
           >
             {fields.map((field) => (

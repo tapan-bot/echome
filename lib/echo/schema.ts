@@ -280,6 +280,24 @@ export function formatEntryDate(date: Date, timeZone?: string): string {
 }
 
 /**
+ * "14:35" — the time of day in 24-hour format, in the person's own time zone.
+ * Midnight is "00:05", never "24:05". An unknown zone falls back to UTC.
+ */
+export function formatEntryTime(date: Date, timeZone?: string): string {
+  const options: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
+  try {
+    return new Intl.DateTimeFormat("en-GB", { ...options, timeZone }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat("en-GB", { ...options, timeZone: "UTC" }).format(date);
+  }
+}
+
+/** "September 26, 2026, 14:35": what goes before the title on an EchoMap entry. */
+export function formatEntryStamp(date: Date, timeZone?: string): string {
+  return `${formatEntryDate(date, timeZone)}, ${formatEntryTime(date, timeZone)}`;
+}
+
+/**
  * Render an entry the way the skill specifies: the dated heading, the filled
  * fields in order, the My Reflection placeholder, then the Echo Thread if there
  * is one ("After the My Reflection placeholder").
