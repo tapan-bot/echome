@@ -45,7 +45,10 @@ export default function PolicyPage() {
         into text, using a speech service run by the browser&rsquo;s maker (for example Google for
         Chrome, Apple for Safari). Your audio goes to that service under its own privacy terms.
         EchoMe never receives or records audio; it only receives the words, which are then treated
-        like anything else you write. If you&rsquo;d rather not, just type.
+        like anything else you write. If you&rsquo;d rather not, just type. After you speak, a
+        &ldquo;Tidy up with AI&rdquo; button is offered. Only if you press it, the words you just
+        spoke, with a little of what was already in the box, are sent to Claude to fix mishearings
+        and punctuation. EchoMe doesn&rsquo;t keep them, and you can undo the change.
       </Section>
 
       <Section title="Account and billing">

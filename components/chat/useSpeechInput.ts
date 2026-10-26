@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { joinDictation } from "@/lib/echo/dictation";
+
 /**
  * Speech to text, using the browser's own speech recognition.
  *
@@ -98,6 +100,17 @@ interface Meter {
   readonly context: AudioContext;
 }
 
+/**
+ * What the last dictation put in the box, so it can be tidied afterwards: the
+ * words that were already there, the words that were spoken, and the box as it
+ * was left. Held in memory only.
+ */
+export interface Dictation {
+  readonly prefix: string;
+  readonly spoken: string;
+  readonly written: string;
+}
+
 /** What the message bar shows while someone is speaking. */
 export interface LiveSpeech {
   /** What was already typed in the box before they started. */
@@ -118,6 +131,8 @@ export function useSpeechInput(getTextarea: () => HTMLTextAreaElement | null) {
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   /** The words as they arrive. Null when not listening. */
   const [live, setLive] = useState<LiveSpeech | null>(null);
+  /** The last dictation written into the box. Null until there is one. */
+  const [dictation, setDictation] = useState<Dictation | null>(null);
 
   /** The recognizer still attached: listening, or finishing its last words. */
   const active = useRef<Recognition | null>(null);
@@ -216,6 +231,7 @@ export function useSpeechInput(getTextarea: () => HTMLTextAreaElement | null) {
     clearSilenceTimer();
 
     setError(null);
+    setDictation(null);
     session.current += 1;
     const id = session.current;
 
@@ -236,10 +252,12 @@ export function useSpeechInput(getTextarea: () => HTMLTextAreaElement | null) {
       else if (textarea.value !== written) return; // They edited it: leave it alone.
       const spoken = `${finalText}${interimText}`.trim();
       if (spoken.length === 0) return;
-      const gap = prefix.length > 0 && !/\s$/.test(prefix) ? " " : "";
-      written = `${prefix}${gap}${spoken}`;
+      // Joined so it reads as one piece of writing with what was there already:
+      // spacing, and a capital or lower case depending on where the sentence stood.
+      written = joinDictation(prefix, spoken);
       textarea.value = written;
       textarea.setSelectionRange(written.length, written.length);
+      setDictation({ prefix, spoken, written });
     };
 
     const recognition = new Recognition();
@@ -332,5 +350,5 @@ export function useSpeechInput(getTextarea: () => HTMLTextAreaElement | null) {
     else start();
   }, [start]);
 
-  return { supported, listening, error, analyser, live, toggle, abort };
+  return { supported, listening, error, analyser, live, dictation, toggle, abort };
 }

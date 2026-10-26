@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, type FormEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 
 import { SILENCE_STOP_SECONDS, useSpeechInput } from "@/components/chat/useSpeechInput";
 import { VoiceEqualizer } from "@/components/chat/VoiceEqualizer";
+import { joinDictation } from "@/lib/echo/dictation";
 
 interface ComposerProps {
   readonly disabled: boolean;
@@ -25,6 +26,60 @@ export function Composer({ disabled, onSend }: ComposerProps) {
     wasListening.current = speech.listening;
   }, [speech.listening]);
 
+  // Tidying what was just dictated, on request. `expected` is what the box holds
+  // if nobody has touched it since the dictation (or the tidy-up): the controls
+  // are only offered, and a tidy-up only applied, while the box still matches it.
+  const [tidy, setTidy] = useState<"idle" | "working" | "done" | "unchanged" | "failed">("idle");
+  const [edited, setEdited] = useState(false);
+  const expected = useRef<string | null>(null);
+  const undoTo = useRef<string | null>(null);
+
+  useEffect(() => {
+    setTidy("idle");
+    setEdited(false);
+    expected.current = speech.dictation?.written ?? null;
+    undoTo.current = null;
+  }, [speech.dictation]);
+
+  function putInBox(text: string) {
+    const element = textarea.current;
+    if (!element) return;
+    element.value = text;
+    element.setSelectionRange(text.length, text.length);
+    expected.current = text;
+  }
+
+  async function tidyNow() {
+    const dictation = speech.dictation;
+    const element = textarea.current;
+    if (!dictation || !element || element.value !== expected.current) return;
+    setTidy("working");
+    try {
+      const response = await fetch("/api/chat/tidy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ before: dictation.prefix, spoken: dictation.spoken }),
+      });
+      if (!response.ok) throw new Error("tidy failed");
+      const result = (await response.json()) as { text?: unknown; changed?: unknown };
+      // Edited while it was working: leave their box alone.
+      if (element.value !== expected.current) return setTidy("idle");
+      if (result.changed !== true || typeof result.text !== "string") return setTidy("unchanged");
+      undoTo.current = element.value;
+      putInBox(joinDictation(dictation.prefix, result.text));
+      setTidy("done");
+    } catch {
+      setTidy("failed");
+    }
+  }
+
+  function undoTidy() {
+    if (undoTo.current === null) return;
+    putInBox(undoTo.current);
+    undoTo.current = null;
+    setTidy("idle");
+  }
+
   function submit(event?: FormEvent) {
     event?.preventDefault();
     const element = textarea.current;
@@ -35,6 +90,8 @@ export function Composer({ disabled, onSend }: ComposerProps) {
     // words that were just sent straight back into it.
     speech.abort();
     element.value = "";
+    expected.current = null;
+    setEdited(true);
     // Nothing is written to localStorage here or anywhere else in this app. A
     // draft lives in this textarea and in this tab's memory, and nowhere else.
     onSend(text);
@@ -71,6 +128,37 @@ export function Composer({ disabled, onSend }: ComposerProps) {
           {speech.error}
         </p>
       ) : null}
+      {speech.dictation && !speech.listening && !disabled && !edited ? (
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-relaxed text-ink-soft">
+          {tidy === "done" ? (
+            <>
+              <span role="status">Tidied.</span>
+              <button type="button" onClick={undoTidy} className="underline underline-offset-4 hover:text-ink">
+                Undo
+              </button>
+            </>
+          ) : tidy === "working" ? (
+            <span role="status">Tidying…</span>
+          ) : tidy === "unchanged" ? (
+            <span role="status">Already reads well.</span>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={tidyNow}
+                className="rounded-full border border-line px-3 py-1 transition hover:border-accent hover:text-ink"
+              >
+                Tidy up with AI
+              </button>
+              <span role={tidy === "failed" ? "alert" : undefined}>
+                {tidy === "failed"
+                  ? "Couldn't tidy that just now. Your words are as you said them."
+                  : "Sends these words to Claude to fix mishearings. EchoMe doesn't keep them."}
+              </span>
+            </>
+          )}
+        </p>
+      ) : null}
       <div className="flex items-end gap-2">
         {/* While listening, the message bar shows the words as they arrive, with a
             small level meter. The text box is only hidden, never removed: it keeps
@@ -82,6 +170,7 @@ export function Composer({ disabled, onSend }: ComposerProps) {
           name="message"
           rows={1}
           onKeyDown={onKeyDown}
+          onInput={(event) => setEdited(event.currentTarget.value !== expected.current)}
           placeholder="What's on your mind?"
           aria-label="Your message"
           className={`max-h-48 min-h-11 flex-1 resize-none rounded-2xl border border-line bg-raised px-4 py-2.5 text-base leading-relaxed outline-none transition focus:border-ink-soft ${
