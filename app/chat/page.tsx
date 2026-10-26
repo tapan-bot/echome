@@ -5,7 +5,7 @@ import { BrandHeader } from "@/components/BrandHeader";
 import { DecryptionError, SessionKeyDestroyedError } from "@/lib/echo/crypto";
 import { SESSION_CLOSED, SESSION_UNREADABLE } from "@/lib/echo/messages";
 import { sessionStore } from "@/lib/echo/store-factory";
-import { resumeOrStartSession } from "@/lib/echo/sessions";
+import { findStranded, resumeOrStartSession } from "@/lib/echo/sessions";
 import { classifyError } from "@/lib/echo/telemetry";
 import { toDisplayTurns, type DisplayTurn } from "@/lib/echo/transcript";
 import { currentUser } from "@/lib/auth/current-user";
@@ -25,7 +25,10 @@ export default async function ChatPage() {
 
   let turns: DisplayTurn[];
   try {
-    const session = await resumeOrStartSession(await sessionStore(), user.id);
+    const store = await sessionStore();
+    // A conversation left unfinished mid-closing: ask, never guess.
+    if (await findStranded(store, user.id)) return <StrandedChoice />;
+    const session = await resumeOrStartSession(store, user.id);
     turns = toDisplayTurns(session.transcript);
   } catch (error) {
     if (error instanceof SessionKeyDestroyedError) return <Stopped message={SESSION_CLOSED} />;
@@ -42,6 +45,44 @@ export default async function ChatPage() {
       <BrandHeader />
       <Conversation initialTurns={turns} />
     </>
+  );
+}
+
+/** Pick up an unfinished conversation, or start fresh (which destroys it). */
+function StrandedChoice() {
+  return (
+    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-4 px-5">
+      <h1 className="text-2xl font-medium tracking-tight">You left a conversation unfinished</h1>
+      <p className="leading-relaxed text-ink-soft">
+        It was part-way through being closed when you left. You can pick it up where it stopped, or
+        start something new.
+      </p>
+      <p
+        role="alert"
+        className="rounded-xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm leading-relaxed text-ink"
+      >
+        <strong className="font-medium">Starting something new ends the earlier conversation for good.</strong>{" "}
+        It is destroyed, and can&rsquo;t be brought back or read again.
+      </p>
+      <form action="/api/chat/stranded" method="post" className="mt-1 flex flex-wrap gap-3">
+        <button
+          type="submit"
+          name="choice"
+          value="resume"
+          className="rounded-full bg-accent px-6 py-2.5 text-base font-medium text-on-accent"
+        >
+          Pick it up
+        </button>
+        <button
+          type="submit"
+          name="choice"
+          value="fresh"
+          className="rounded-full border border-line px-6 py-2.5 text-base text-ink-soft transition hover:border-accent hover:text-ink"
+        >
+          Start something new
+        </button>
+      </form>
+    </main>
   );
 }
 

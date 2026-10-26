@@ -12,7 +12,10 @@ import {
 import {
   appendMessages,
   destroySession,
+  discardStranded,
+  findStranded,
   readTranscript,
+  reopenStranded,
   resumeOrStartSession,
 } from "@/lib/echo/sessions";
 import {
@@ -92,32 +95,76 @@ async function seededSession(store: SessionStore) {
 }
 
 describe("a conversation left part-way through closing", () => {
-  it("copes with more than one, resuming the most recent", async () => {
-    const store = new InMemorySessionStore();
-    // Leftovers from the old Go back race: each attempt stranded a closing row.
-    const older = await resumeOrStartSession(store, USER);
-    await store.setStatus(older.row.id, USER, "closing");
-    const newer = await resumeOrStartSession(store, USER); // the old code started this one
-    await store.setStatus(newer.row.id, USER, "closing");
+  /** A conversation with something in it, stranded mid-closing. */
+  async function stranded(store: InMemorySessionStore, words = CONFESSION) {
+    const session = await resumeOrStartSession(store, USER);
+    await appendMessages(store, session.row, session.transcript, { role: "user", content: words });
+    await store.setStatus(session.row.id, USER, "closing");
+    return session.row.id;
+  }
 
-    const again = await resumeOrStartSession(store, USER);
-    expect(again.row.id).toBe(newer.row.id);
-    expect(store.peek(newer.row.id)?.status).toBe("open");
+  it("is noticed, so the chat can ask instead of guessing", async () => {
+    const store = new InMemorySessionStore();
+    const id = await stranded(store);
+    expect((await findStranded(store, USER))?.id).toBe(id);
   });
 
-  it("is resumed, not skipped for a new empty one", async () => {
+  it("is not stranded when there is an open conversation beside it", async () => {
     const store = new InMemorySessionStore();
-    const first = await resumeOrStartSession(store, USER);
-    await appendMessages(store, first.row, first.transcript, { role: "user", content: CONFESSION });
+    await stranded(store);
+    await resumeOrStartSession(store, USER); // a new open one
+    expect(await findStranded(store, USER)).toBeNull();
+  });
 
-    // They reached the closing screen, then pressed "Go back".
-    await store.setStatus(first.row.id, USER, "closing");
+  it("is picked up where it stopped, with every word still there", async () => {
+    const store = new InMemorySessionStore();
+    const id = await stranded(store);
 
+    expect(await reopenStranded(store, USER)).toBe(true);
     const again = await resumeOrStartSession(store, USER);
-    expect(again.row.id).toBe(first.row.id);
+    expect(again.row.id).toBe(id);
     expect(again.row.status).toBe("open");
-    expect(store.peek(first.row.id)?.status).toBe("open");
     expect(JSON.stringify(again.transcript)).toContain(CONFESSION);
+  });
+
+  it("picks up the most recent when there are several", async () => {
+    const store = new InMemorySessionStore();
+    await stranded(store, "an older conversation");
+    const newer = await stranded(store, "a newer conversation");
+    await reopenStranded(store, USER);
+    expect(store.peek(newer)?.status).toBe("open");
+  });
+
+  it("is destroyed for good when they start fresh, every leftover with it", async () => {
+    const store = new InMemorySessionStore();
+    const a = await stranded(store, "first leftover");
+    const b = await stranded(store, "second leftover");
+
+    expect(await discardStranded(store, USER)).toBe(2);
+    expect(store.peek(a)).toBeUndefined();
+    expect(store.peek(b)).toBeUndefined();
+    expect(await findStranded(store, USER)).toBeNull();
+
+    // And what follows is a genuinely fresh, empty conversation.
+    const fresh = await resumeOrStartSession(store, USER);
+    expect(fresh.transcript.messages).toHaveLength(0);
+  });
+
+  it("leaves other people's conversations alone", async () => {
+    const store = new InMemorySessionStore();
+    await stranded(store);
+    expect(await findStranded(store, OTHER_USER)).toBeNull();
+    expect(await discardStranded(store, OTHER_USER)).toBe(0);
+    expect(await findStranded(store, USER)).not.toBeNull();
+  });
+
+  it("resuming does not quietly reopen it", async () => {
+    const store = new InMemorySessionStore();
+    const id = await stranded(store);
+    // resumeOrStartSession only ever joins an OPEN conversation: the chat page asks first.
+    const fresh = await resumeOrStartSession(store, USER);
+    expect(fresh.row.id).not.toBe(id);
+    expect(store.peek(id)?.status).toBe("closing");
   });
 });
 

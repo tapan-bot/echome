@@ -215,7 +215,9 @@ export function ClosingRitual() {
       </p>
       <div className="flex flex-wrap gap-3">
         {retryable ? <Primary onClick={proposal ? commit : begin}>Try again</Primary> : null}
-        <Secondary href="/chat">Back to the conversation</Secondary>
+        <Secondary href="/chat" onNavigate={() => post({ action: "abandon" })}>
+          Back to the conversation
+        </Secondary>
       </div>
     </Shell>
   );

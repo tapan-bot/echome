@@ -47,16 +47,6 @@ export async function resumeOrStartSession(
     return { row: existing, transcript: readTranscript(existing) };
   }
 
-  // A conversation left part-way through the closing ritual (they pressed "Go
-  // back", or a write to xTiles failed and they returned) is still THEIR
-  // conversation. Without this it would be skipped, an empty one started beside
-  // it, and the person would think their conversation had been lost.
-  const closing = await store.findClosing(userId);
-  if (closing) {
-    await store.setStatus(closing.id, userId, "open");
-    return { row: { ...closing, status: "open" }, transcript: readTranscript(closing) };
-  }
-
   const transcript = emptyTranscript();
   const sessionId = randomUUID();
   const sessionKey = generateSessionKey();
@@ -83,6 +73,36 @@ export async function resumeOrStartSession(
     }
     throw error;
   }
+}
+
+/**
+ * A conversation left part-way through the closing ritual, with no open one
+ * beside it: it was never finished and never put back. "Go back" and a failed
+ * save put theirs back themselves, so what is found here is a leftover. It is the
+ * person's own conversation, so it is never silently skipped (they would think it
+ * lost) and never silently reopened (it may be old); the chat asks them.
+ */
+export async function findStranded(store: SessionStore, userId: string): Promise<SessionRow | null> {
+  if (await store.findOpen(userId)) return null;
+  return store.findClosing(userId);
+}
+
+/** They chose to pick it up: the most recent unfinished conversation becomes the open one. */
+export async function reopenStranded(store: SessionStore, userId: string): Promise<boolean> {
+  const stranded = await findStranded(store, userId);
+  if (!stranded) return false;
+  await store.setStatus(stranded.id, userId, "open");
+  return true;
+}
+
+/** They chose to start fresh: every unfinished conversation is destroyed, for good. */
+export async function discardStranded(store: SessionStore, userId: string): Promise<number> {
+  let destroyed = 0;
+  for (let stranded = await store.findClosing(userId); stranded; stranded = await store.findClosing(userId)) {
+    await destroySession(store, stranded.id, userId);
+    destroyed += 1;
+  }
+  return destroyed;
 }
 
 /** Decrypt a row into a transcript. Throws SessionKeyDestroyedError if closed. */
