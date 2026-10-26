@@ -46,6 +46,11 @@ export function Composer({ disabled, onSend }: ComposerProps) {
     // finished thought by accident is worse than an extra tap.
     if (event.key !== "Enter" || event.shiftKey) return;
     if (window.matchMedia("(pointer: coarse)").matches) return;
+    // Enter while an input method is still composing a word confirms the word; it is not "send".
+    if (event.nativeEvent.isComposing) return;
+    // Without this the keypress goes on to type its own new line into the box that
+    // submit() has just emptied, leaving the cursor on a blank second line.
+    event.preventDefault();
     submit();
   }
 
