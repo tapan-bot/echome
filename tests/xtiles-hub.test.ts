@@ -284,3 +284,30 @@ describe("reading what xTiles says after creating a project", () => {
     expect(parseCreated("Done.")).toEqual({ projectId: null, viewId: null });
   });
 });
+
+describe("the project list as xTiles really words it", () => {
+  const REAL_SHAPE = "# Workspaces & Projects\n\n## My workspace (personal)\n- **EchoHub** (0123456789abcdef01234567)\n";
+
+  it("reads a plain id in parentheses after a bold name", () => {
+    expect(parseProjects(REAL_SHAPE)).toEqual([{ id: "0123456789abcdef01234567", name: "EchoHub" }]);
+    expect(pickHub(parseProjects(REAL_SHAPE))?.id).toBe("0123456789abcdef01234567");
+  });
+
+  it("does not take a workspace heading or an empty workspace for a project", () => {
+    expect(parseProjects("# Workspaces & Projects\n\n## My workspace (personal)\n_No projects_\n")).toEqual([]);
+  });
+
+  it("reads several projects across several workspaces", () => {
+    const text = [
+      "# Workspaces & Projects",
+      "",
+      "## My workspace (personal)",
+      "- **EchoHub** (0123456789abcdef01234567)",
+      "- **Garden plans** (89abcdef0123456789abcdef)",
+      "",
+      "## Team (shared)",
+      "- **Budget** (fedcba9876543210fedcba98)",
+    ].join("\n");
+    expect(parseProjects(text).map((p) => p.name)).toEqual(["EchoHub", "Garden plans", "Budget"]);
+  });
+});

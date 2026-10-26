@@ -222,6 +222,8 @@ export function parseProjects(text: string): Project[] {
     const id =
       /\b(?:id|projectId)\s*[:=]\s*`?([A-Za-z0-9_-]{6,})`?/i.exec(line)?.[1] ??
       /\(([0-9a-f]{8}-[0-9a-f-]{20,})\)/i.exec(line)?.[1] ??
+      // xTiles' own layout: "- **EchoHub** (6adba074c2edef0d5622d181)", a plain id in parentheses.
+      /\(([A-Za-z0-9_-]{16,})\)\s*$/.exec(line)?.[1] ??
       /\/([A-Za-z0-9_-]{8,})\)?\s*$/.exec(line)?.[1];
     if (!id) continue;
     const name = line

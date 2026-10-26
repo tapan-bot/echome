@@ -301,3 +301,19 @@ describe("setting up the EchoHub", () => {
     expect(calls("xtiles_create_tiles_from_markdown_by_view")).toHaveLength(1);
   });
 });
+
+describe("an EchoHub that is there but cannot be read", () => {
+  it("is not created a second time", async () => {
+    xtiles.state.listUnreadable = true;
+    connect();
+    expect(await adapter.createHub(USER)).toBe("exists");
+    expect(calls("xtiles_create_project_from_markdown")).toHaveLength(0);
+  });
+
+  it("is reported as there but unreadable, not as missing", async () => {
+    xtiles.state.listUnreadable = true;
+    connect();
+    await expect(adapter.write(USER, PAGE, "key-1")).rejects.toThrow(/named in the project list/);
+    expect(await adapter.checkWorkspace(USER).catch(() => "threw")).not.toBe("ready");
+  });
+});

@@ -37,6 +37,8 @@ export interface FakeXTilesState {
   createFails: boolean;
   /** Answer project reads with a project that has no EchoCompass or EchoMap in it. */
   emptyContent: boolean;
+  /** List the hub in a layout whose project ids cannot be read. */
+  listUnreadable: boolean;
   /** Make the next N MCP posts answer 401, as an expired token would. */
   rejectNext: number;
   sessionDeletes: number;
@@ -119,6 +121,7 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
     contentAsMarkdown: false,
     createFails: false,
     emptyContent: false,
+    listUnreadable: false,
     rejectNext: 0,
     sessionDeletes: 0,
     ...initial,
@@ -231,6 +234,10 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
         const args = message.params?.arguments ?? {};
         switch (message.params?.name) {
           case "xtiles_list_projects":
+            if (state.listUnreadable) {
+              // The hub is there, in a layout with no id we can read.
+              return rpcReply(response, message.id, text("# Workspaces & Projects\n\n## My workspace\n* EchoHub, edited yesterday\n"));
+            }
             return rpcReply(
               response,
               message.id,

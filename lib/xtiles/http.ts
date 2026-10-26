@@ -43,6 +43,9 @@ import {
  * page is the person's own.
  */
 
+/** Does this text name an EchoHub at all, however the line around it is written? */
+const MENTIONS_HUB = /echo[\s_-]*hub/i;
+
 /** The tools whose descriptions the diagnose route prints. */
 const NOTED_TOOLS = new Set([
   "xtiles_create_project_from_markdown",
@@ -60,8 +63,14 @@ const REFRESH_MARGIN_MS = 60_000;
 /** Signed in to xTiles, but there is no EchoHub project to work with yet. */
 export class HubNotFoundError extends Error {
   override readonly name = "HubNotFoundError";
-  /** What was looked at, as counts only: no project or page names, nothing written. */
-  constructor(readonly detail: string = "") {
+  /**
+   * What was looked at, as counts only: no project or page names, nothing written.
+   * `present` means an EchoHub IS in the workspace, though it could not be read.
+   */
+  constructor(
+    readonly detail: string = "",
+    readonly present: boolean = false,
+  ) {
     super("The EchoHub project was not found in this xTiles workspace.");
   }
 }
@@ -219,6 +228,7 @@ export class XTilesHttpAdapter implements XTilesAdapter {
     // The project list can come back in pages too; follow it until the hub shows up.
     let project: Project | null = null;
     let listed = 0;
+    let mentioned = false; // the raw list names an EchoHub, whether or not we could read its line
     let cursor: string | undefined;
     for (let page = 0; page < 5 && !project; page += 1) {
       const list = await session.callTool(
@@ -227,13 +237,21 @@ export class XTilesHttpAdapter implements XTilesAdapter {
       );
       const projects = parseProjects(list);
       listed += projects.length;
+      mentioned ||= MENTIONS_HUB.test(list);
       project = pickHub(projects);
       const next = listCursor(list);
       // A tool that ignores the cursor would hand back the same page forever.
       if (!next || next === cursor) break;
       cursor = next;
     }
-    if (!project) throw new HubNotFoundError(`${listed} project(s) listed, none named like EchoHub`);
+    if (!project) {
+      throw new HubNotFoundError(
+        mentioned
+          ? `an EchoHub is named in the project list, but its entry could not be read (${listed} read)`
+          : `${listed} project(s) listed, none named like EchoHub`,
+        mentioned,
+      );
+    }
 
     const content = await read(project.id);
     if (!content.compass && !content.map) {
@@ -285,6 +303,9 @@ export class XTilesHttpAdapter implements XTilesAdapter {
         return "exists";
       } catch (error) {
         if (!(error instanceof HubNotFoundError)) throw error;
+        // One is in the list, we just cannot read it: creating another would only
+        // leave them with two.
+        if (error.present) return "exists";
       }
 
       const tools = await session.requireTools([TOOL_CREATE_PROJECT]);
