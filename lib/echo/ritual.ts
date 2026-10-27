@@ -44,6 +44,8 @@ export type RitualFailure =
   | "not-connected"
   /** There is no EchoHub to write to; setting one up is the way forward. */
   | "hub-missing"
+  /** xTiles refused the entry: the hub may have been deleted or moved. */
+  | "hub-unusable"
   | "write-failed";
 
 export class RitualError extends Error {
@@ -183,6 +185,18 @@ export async function commitClosing(
       await markFailed(receiptId, failure);
       // THE SESSION IS NOT DESTROYED. This is the whole recovery path.
       const hubMissing = error instanceof XTilesWriteError && error.hubMissing;
+      const hubRejected = error instanceof XTilesWriteError && error.hubRejected;
+      if (hubRejected) {
+        // Nothing is destroyed, and trying again is still allowed: the hub may be fine and xTiles
+        // merely cross. A fresh one is offered beside it, for when it was deleted or moved.
+        throw new RitualError(
+          "xTiles wouldn't take this entry, so I haven't ended the conversation. Your EchoHub may have been " +
+            "deleted or moved. You can try again, or set up a fresh one below. Your conversation is exactly " +
+            "where you left it.",
+          "hub-unusable",
+          true,
+        );
+      }
       throw new RitualError(
         hubMissing
           ? "I couldn't find your EchoHub in your xTiles workspace, so I haven't ended the conversation. " +

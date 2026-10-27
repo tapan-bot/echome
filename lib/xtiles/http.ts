@@ -134,10 +134,21 @@ export class XTilesHttpAdapter implements XTilesAdapter {
         }
 
         const tools = await session.requireTools([TOOL_ADD_TILES]);
-        await session.callTool(
-          TOOL_ADD_TILES,
-          buildArguments(tools.get(TOOL_ADD_TILES)!, { viewId: hub.map.id, markdown: page.markdown }),
-        );
+        try {
+          await session.callTool(
+            TOOL_ADD_TILES,
+            buildArguments(tools.get(TOOL_ADD_TILES)!, { viewId: hub.map.id, markdown: page.markdown }),
+          );
+        } catch (error) {
+          // xTiles answered, and said no: unlike a dropped connection, that is not
+          // going to change by trying again. The hub it was sent to is most likely
+          // one that was deleted or moved, so say so and let a fresh one be set up.
+          if (error instanceof McpError && error.kind === "tool") {
+            const detail = error.message.replace(/\):.*$/s, ")");
+            throw new XTilesWriteError(`tool: ${detail}`, true, false, true);
+          }
+          throw error;
+        }
         return { ref, writtenAt: new Date().toISOString() };
       });
     } catch (error) {
@@ -305,16 +316,20 @@ export class XTilesHttpAdapter implements XTilesAdapter {
    * straight back from xTiles, is kept, and the same code that will later read and
    * write the hub must be able to find it again before this counts as done.
    */
-  async createHub(userId: string): Promise<"created" | "exists"> {
+  async createHub(userId: string, options: { replace?: boolean } = {}): Promise<"created" | "exists"> {
     return this.withSession(userId, async (session, tokens) => {
-      try {
-        await this.loadHub(session, tokens, userId);
-        return "exists";
-      } catch (error) {
-        if (!(error instanceof HubNotFoundError)) throw error;
-        // One is in the list, we just cannot read it: creating another would only
-        // leave them with two.
-        if (error.present) return "exists";
+      // `replace`: they were told xTiles refused the entry and asked for a fresh hub,
+      // so a listed one is not a reason to stop. Otherwise one that is there is left alone.
+      if (!options.replace) {
+        try {
+          await this.loadHub(session, tokens, userId);
+          return "exists";
+        } catch (error) {
+          if (!(error instanceof HubNotFoundError)) throw error;
+          // One is in the list, we just cannot read it: creating another would only
+          // leave them with two.
+          if (error.present) return "exists";
+        }
       }
 
       const tools = await session.requireTools([TOOL_CREATE_PROJECT]);
@@ -322,7 +337,7 @@ export class XTilesHttpAdapter implements XTilesAdapter {
       // A hub created earlier whose content we could not read back must not be
       // created a second time: if the project we remembered is still in the list,
       // leave it. A deleted project can still answer by id, so the list decides.
-      if (tokens.projectId) {
+      if (tokens.projectId && !options.replace) {
         const listTools = await session.requireTools([TOOL_LIST_PROJECTS]);
         const { projects } = await this.listAllProjects(session, listTools);
         if (projects.some((p) => p.id === tokens.projectId)) return "exists";

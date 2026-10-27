@@ -42,7 +42,7 @@ export async function GET() {
   return NextResponse.json({ status: status satisfies HubStatus });
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: NOT_SIGNED_IN }, { status: 401 });
 
@@ -59,9 +59,12 @@ export async function POST() {
     return NextResponse.json({ status: "not-connected" }, { status: 409 });
   }
 
+  // `replace`: xTiles refused the entry and they chose a fresh hub. Only ever from that button.
+  const body = (await request.json().catch(() => ({}))) as { replace?: unknown };
+
   try {
-    // A hub that turns out to exist already is left alone: the adapter looks first.
-    const result = await adapter.createHub(user.id);
+    // Otherwise a hub that turns out to exist already is left alone: the adapter looks first.
+    const result = await adapter.createHub(user.id, { replace: body.replace === true });
     return NextResponse.json({ status: result });
   } catch (error) {
     const reason =

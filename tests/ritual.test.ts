@@ -171,6 +171,24 @@ describe("when the xTiles write fails", () => {
     expect(await store.find(id, USER)).not.toBeNull();
   });
 
+  it("offers a fresh hub, and a retry, when xTiles refuses the entry", async () => {
+    const store = new InMemorySessionStore();
+    const xtiles = new FakeXTiles();
+    const id = await conversation(store);
+    const proposal = await proposeClosing(store, USER);
+
+    xtiles.failNextWrite = { reason: "tool: refused", retryable: true, hubRejected: true };
+
+    const error = (await commitClosing(store, xtiles, USER, id, ["entry-theme"], proposal.distillation).catch(
+      (e: RitualError) => e,
+    )) as RitualError;
+
+    expect(error.kind).toBe("hub-unusable");
+    expect(error.retryable).toBe(true);
+    expect(error.message).toMatch(/set up a fresh one/i);
+    expect(await store.find(id, USER)).not.toBeNull();
+  });
+
   it("succeeds on retry, and writes exactly once", async () => {
     const store = new InMemorySessionStore();
     const xtiles = new FakeXTiles();

@@ -271,6 +271,8 @@ export function ClosingRitual() {
           }}
         />
       ) : null}
+      {failedKind === "hub-unusable" && !hubMade ? <HubSetup replace onReady={() => setHubMade(true)} /> : null}
+      {failedKind === "hub-unusable" && hubMade ? <HubReady /> : null}
       {failedKind === "not-connected" ? <ConnectXTiles onLeave={() => post({ action: "abandon" })} /> : null}
       {failedKind === "hub-missing" && hub === "ready" ? <HubReady /> : null}
       <div className="flex flex-wrap gap-3">
@@ -389,7 +391,7 @@ function Choice({
  * There is no EchoHub in their xTiles yet. Offered, never done unasked: the
  * button creates it from the template, and only when they press it.
  */
-function HubSetup({ onReady }: { onReady: () => void }) {
+function HubSetup({ onReady, replace = false }: { onReady: () => void; replace?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -397,7 +399,12 @@ function HubSetup({ onReady }: { onReady: () => void }) {
     setBusy(true);
     setFailed(false);
     try {
-      const response = await fetch("/api/xtiles/hub", { method: "POST" });
+      const response = await fetch("/api/xtiles/hub", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // `replace`: xTiles refused the entry, and they chose to start a fresh hub.
+        body: JSON.stringify({ replace }),
+      });
       const body = (await response.json().catch(() => ({}))) as { status?: unknown };
       if (response.ok && (body.status === "created" || body.status === "exists")) onReady();
       else setFailed(true);
@@ -410,14 +417,22 @@ function HubSetup({ onReady }: { onReady: () => void }) {
 
   return (
     <div role="status" className="flex flex-col gap-3 rounded-xl border border-accent/40 bg-accent-soft px-4 py-3 text-sm leading-relaxed">
-      <p>
-        <strong className="font-medium">Your EchoHub isn&rsquo;t in your xTiles yet.</strong> That&rsquo;s where what
-        you keep is written. I can set it up from the template now. Nothing in your workspace changes until you press the
-        button, and your conversation stays right here.
-      </p>
+      {replace ? (
+        <p>
+          <strong className="font-medium">Set up a fresh EchoHub?</strong> If you deleted or moved your EchoHub, I can make
+          a new one from the template in your xTiles. If you didn&rsquo;t, try again first. Nothing in your workspace
+          changes until you press the button, and your conversation stays right here.
+        </p>
+      ) : (
+        <p>
+          <strong className="font-medium">Your EchoHub isn&rsquo;t in your xTiles yet.</strong> That&rsquo;s where what
+          you keep is written. I can set it up from the template now. Nothing in your workspace changes until you press the
+          button, and your conversation stays right here.
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <Primary onClick={setUp} disabled={busy}>
-          {busy ? "Setting up…" : "Set up my EchoHub"}
+          {busy ? "Setting up…" : replace ? "Set up a fresh EchoHub" : "Set up my EchoHub"}
         </Primary>
         {failed ? (
           <span role="alert" className="text-warn">

@@ -57,7 +57,7 @@ export interface XTilesAdapter {
    * Create the EchoHub (the EchoCompass and EchoMap pages) in their workspace,
    * from the template. A no-op, answering "exists", if they already have one.
    */
-  createHub(userId: string): Promise<"created" | "exists">;
+  createHub(userId: string, options?: { replace?: boolean }): Promise<"created" | "exists">;
 
   /**
    * Add one dated entry to the person's EchoMap, as a page (never a task).
@@ -79,6 +79,11 @@ export class XTilesWriteError extends Error {
     readonly retryable: boolean,
     /** There is no EchoHub in their workspace (it may have been deleted): setting one up is the fix. */
     readonly hubMissing: boolean = false,
+    /**
+     * xTiles itself refused the entry, though a hub is listed: it may have been deleted or
+     * moved. Setting up a fresh one is the way forward, so that is offered.
+     */
+    readonly hubRejected: boolean = false,
   ) {
     super(`xTiles write failed: ${reason}`);
   }

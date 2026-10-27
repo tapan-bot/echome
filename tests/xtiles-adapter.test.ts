@@ -306,6 +306,35 @@ describe("setting up the EchoHub", () => {
   });
 });
 
+describe("xTiles refusing an entry", () => {
+  // The hub is listed and readable, but xTiles will not take a write to it: the
+  // case of a hub that was deleted or moved yet still shows up.
+  beforeEach(() => {
+    xtiles.state.rejectWrites = true;
+    connect({ projectId: "p-hub" });
+  });
+
+  it("is reported as the hub being unusable, and still worth trying again", async () => {
+    await expect(adapter.write(USER, PAGE, "key-1")).rejects.toMatchObject({
+      name: "XTilesWriteError",
+      hubRejected: true,
+      hubMissing: false,
+      retryable: true,
+    });
+  });
+
+  it("lets a fresh hub be set up on request, even though one is listed", async () => {
+    // Asked to set up normally, the hub that is there is left alone ...
+    expect(await adapter.createHub(USER)).toBe("exists");
+    expect(calls("xtiles_create_project_from_markdown")).toHaveLength(0);
+
+    // ... but when they ask for a fresh one, it is made.
+    expect(await adapter.createHub(USER, { replace: true })).toBe("created");
+    expect(calls("xtiles_create_project_from_markdown")).toHaveLength(1);
+    expect(stored().projectId).toBe("p-hub");
+  });
+});
+
 describe("an EchoHub that was deleted", () => {
   // The project is gone from the list, but asked for by its remembered id it can
   // still answer, and writing to it then fails. The list is what to believe.

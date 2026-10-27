@@ -44,6 +44,8 @@ export interface FakeXTilesState {
    * by its id, as a project sitting in a trash might. Writing to it fails.
    */
   deletedStillAnswers: boolean;
+  /** Make every write to the EchoMap page fail, as xTiles refusing an entry would. */
+  rejectWrites: boolean;
   /** Make the next N MCP posts answer 401, as an expired token would. */
   rejectNext: number;
   sessionDeletes: number;
@@ -128,6 +130,7 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
     emptyContent: false,
     listUnreadable: false,
     deletedStillAnswers: false,
+    rejectWrites: false,
     rejectNext: 0,
     sessionDeletes: 0,
     ...initial,
@@ -297,7 +300,7 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
               }),
             );
           case "xtiles_create_tiles_from_markdown_by_view":
-            if (args.view_id !== "v-map" || !state.hubPresent) return rpcReply(response, message.id, { ...text("View not found"), isError: true });
+            if (args.view_id !== "v-map" || !state.hubPresent || state.rejectWrites) return rpcReply(response, message.id, { ...text("View not found"), isError: true });
             state.mapEntries.push(String(args.markdown));
             return rpcReply(response, message.id, text("ok"));
           default:
