@@ -46,6 +46,8 @@ export interface FakeXTilesState {
   deletedStillAnswers: boolean;
   /** The project list has not caught up: it leaves the hub out, though it exists and answers by id. */
   hideFromList: boolean;
+  /** Reading a project's content fails, as for a project xTiles has not finished setting up. */
+  contentFails: boolean;
   /** Make every write to the EchoMap page fail, as xTiles refusing an entry would. */
   rejectWrites: boolean;
   /** Make the next N MCP posts answer 401, as an expired token would. */
@@ -133,6 +135,7 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
     listUnreadable: false,
     deletedStillAnswers: false,
     rejectWrites: false,
+    contentFails: false,
     hideFromList: false,
     rejectNext: 0,
     sessionDeletes: 0,
@@ -256,6 +259,7 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
               text({ projects: [{ id: "p-other", name: "EchoMe" }, ...(state.hubPresent && !state.hideFromList ? [{ id: "p-hub", name: "EchoHub" }] : [])] }),
             );
           case "xtiles_get_project_content":
+            if (state.contentFails) return rpcReply(response, message.id, { ...text("Not ready"), isError: true });
             if (args.project_id !== "p-hub" || (!state.hubPresent && !state.deletedStillAnswers)) {
               return rpcReply(response, message.id, { ...text("Project not found"), isError: true });
             }

@@ -360,11 +360,14 @@ export class XTilesHttpAdapter implements XTilesAdapter {
       // A hub created earlier whose content we could not read back must not be
       // created a second time: if the project we remembered is still in the list,
       // leave it. A deleted project can still answer by id, so the list decides.
-      if (tokens.projectId && !options.replace) {
-        const listTools = await session.requireTools([TOOL_LIST_PROJECTS]);
-        const { projects } = await this.listAllProjects(session, listTools);
-        if (projects.some((p) => p.id === tokens.projectId)) return "exists";
-        // One made a moment ago may not be in the list yet: if it answers, it is theirs.
+      if (tokens.projectId) {
+        if (!options.replace) {
+          const listTools = await session.requireTools([TOOL_LIST_PROJECTS]);
+          const { projects } = await this.listAllProjects(session, listTools);
+          if (projects.some((p) => p.id === tokens.projectId)) return "exists";
+        }
+        // One made a moment ago may not be in the list yet: if it answers, it is theirs. This
+        // holds for a fresh hub too: pressing "set up a fresh EchoHub" again must not make a third.
         if (recentlyMade(tokens)) {
           try {
             const structure = await session.requireTools([TOOL_STRUCTURE]);
@@ -392,10 +395,10 @@ export class XTilesHttpAdapter implements XTilesAdapter {
       await saveTokens(userId, made);
       try {
         await this.loadHub(session, made, userId);
-      } catch (error) {
-        // It was made and its id is kept. Not being able to read it back this very moment is no
-        // reason to say it failed, and so to make a second one on the next press.
-        if (!(error instanceof HubNotFoundError)) throw error;
+      } catch {
+        // It was made and its id is kept. Whatever stops it being read back this very moment (it
+        // may not be ready yet) is no reason to say it failed, and so to make another on the
+        // next press.
       }
       return "created";
     });

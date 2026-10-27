@@ -200,17 +200,10 @@ export function ClosingRitual() {
               : "Here\u2019s what stood out. xTiles isn\u2019t connected, so there\u2019s nowhere to keep it, and I haven\u2019t ended the conversation. It\u2019s still here exactly as you left it."}
           </p>
           {entry && fields.length > 0 ? (
-            <Group title={entry.title} subtitle="What stood out in this conversation">
-              {fields.map((field) => (
-                <div key={field.key} className="flex flex-col gap-0.5 rounded-xl border border-line px-4 py-3">
-                  <span className="text-xs uppercase tracking-wide text-ink-soft">{field.label}</span>
-                  <span className="text-base leading-snug">{field.text}</span>
-                </div>
-              ))}
-              <p className="px-1 text-xs leading-relaxed text-ink-soft">
-                This is only shown here. It isn&rsquo;t saved anywhere. Connect xTiles to keep what matters.
-              </p>
-            </Group>
+            <SummaryTabs
+              title={entry.title}
+              parts={fields.map((field) => ({ id: field.key, label: field.label, text: field.text }))}
+            />
           ) : null}
           <div className="mt-1 flex flex-wrap items-center gap-3">
             <Secondary primary href="/account" onNavigate={() => post({ action: "abandon" })}>
@@ -433,6 +426,62 @@ function Choice({
         <span className="text-base leading-snug">{text}</span>
       </span>
     </label>
+  );
+}
+
+/**
+ * The summary, a part at a time: the parts run along the top as tabs, and choosing one shows
+ * what was drawn out under it. Read-only, and held only in this page.
+ */
+function SummaryTabs({
+  title,
+  parts,
+}: {
+  title: string;
+  parts: readonly { id: string; label: string; text: string }[];
+}) {
+  const [active, setActive] = useState(0);
+  const current = parts[Math.min(active, parts.length - 1)];
+  if (!current) return null;
+  return (
+    <section className="mt-2 flex flex-col gap-3">
+      <h2 className="text-sm font-medium">{title}</h2>
+      <div role="tablist" aria-label="What stood out" className="flex flex-wrap gap-2">
+        {parts.map((part, index) => {
+          const selected = part.id === current.id;
+          return (
+            <button
+              key={part.id}
+              type="button"
+              role="tab"
+              id={`summary-tab-${part.id}`}
+              aria-selected={selected}
+              aria-controls="summary-panel"
+              onClick={() => setActive(index)}
+              className={`rounded-full border px-4 py-1.5 text-sm transition ${
+                selected
+                  ? "border-accent bg-accent-soft text-ink"
+                  : "border-line text-ink-soft hover:border-accent hover:text-ink"
+              }`}
+            >
+              {part.label}
+            </button>
+          );
+        })}
+      </div>
+      <div
+        role="tabpanel"
+        id="summary-panel"
+        aria-labelledby={`summary-tab-${current.id}`}
+        className="echo-rise rounded-xl border border-line bg-raised px-4 py-4 text-base leading-relaxed"
+        key={current.id}
+      >
+        {current.text}
+      </div>
+      <p className="px-1 text-xs leading-relaxed text-ink-soft">
+        This is only shown here. It isn&rsquo;t saved anywhere. Connect xTiles to keep what matters.
+      </p>
+    </section>
   );
 }
 

@@ -320,6 +320,19 @@ describe("never making a second EchoHub", () => {
     expect(calls("xtiles_create_project_from_markdown")).toHaveLength(1);
   });
 
+  it("says a fresh hub was made, and does not make another, when it cannot be read back yet", async () => {
+    // xTiles made it but is not ready to show its content: that is no failure, and pressing
+    // "set up a fresh EchoHub" again must not leave them with three.
+    xtiles.state.rejectWrites = true;
+    connect({ projectId: "p-old" });
+    xtiles.state.contentFails = true;
+
+    expect(await adapter.createHub(USER, { replace: true })).toBe("created");
+    expect(await adapter.createHub(USER, { replace: true })).toBe("exists");
+    expect(await adapter.createHub(USER, { replace: true })).toBe("exists");
+    expect(calls("xtiles_create_project_from_markdown")).toHaveLength(1);
+  });
+
   it("makes one hub when the button is pressed twice at once", async () => {
     xtiles.state.hubPresent = false;
     connect();
