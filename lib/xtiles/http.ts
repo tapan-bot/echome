@@ -218,37 +218,23 @@ export class XTilesHttpAdapter implements XTilesAdapter {
       return this.withPageIds(session, projectId, merged);
     };
 
-    // The project id found last time, if any; otherwise look for it.
-    if (tokens.projectId) {
+    // The project list is the truth about what exists. A deleted project can still
+    // answer when it is asked for by its id, and writing to it then fails, so a
+    // remembered id counts only while the list still shows it. A list that cannot
+    // be read at all proves nothing, so then the remembered id is trusted.
+    const { projects, mentioned } = await this.listAllProjects(session, tools);
+    if (tokens.projectId && (projects.length === 0 || projects.some((p) => p.id === tokens.projectId))) {
       const content = await read(tokens.projectId);
       if (content.compass || content.map) return { projectId: tokens.projectId, ...content };
-      // Stale (deleted or replaced): fall through and look again.
+      // Replaced: fall through and look again.
     }
 
-    // The project list can come back in pages too; follow it until the hub shows up.
-    let project: Project | null = null;
-    let listed = 0;
-    let mentioned = false; // the raw list names an EchoHub, whether or not we could read its line
-    let cursor: string | undefined;
-    for (let page = 0; page < 5 && !project; page += 1) {
-      const list = await session.callTool(
-        TOOL_LIST_PROJECTS,
-        buildArguments(tools.get(TOOL_LIST_PROJECTS)!, { cursor }),
-      );
-      const projects = parseProjects(list);
-      listed += projects.length;
-      mentioned ||= MENTIONS_HUB.test(list);
-      project = pickHub(projects);
-      const next = listCursor(list);
-      // A tool that ignores the cursor would hand back the same page forever.
-      if (!next || next === cursor) break;
-      cursor = next;
-    }
+    const project = pickHub(projects);
     if (!project) {
       throw new HubNotFoundError(
         mentioned
-          ? `an EchoHub is named in the project list, but its entry could not be read (${listed} read)`
-          : `${listed} project(s) listed, none named like EchoHub`,
+          ? `an EchoHub is named in the project list, but its entry could not be read (${projects.length} read)`
+          : `${projects.length} project(s) listed, none named like EchoHub`,
         mentioned,
       );
     }
@@ -263,6 +249,29 @@ export class XTilesHttpAdapter implements XTilesAdapter {
       await saveTokens(userId, { ...tokens, projectId: project.id }).catch(() => undefined);
     }
     return { projectId: project.id, ...content };
+  }
+
+  /** Every project in the workspace, following the list's pages. */
+  private async listAllProjects(
+    session: McpSession,
+    tools: Awaited<ReturnType<McpSession["requireTools"]>>,
+  ): Promise<{ projects: Project[]; mentioned: boolean }> {
+    const projects: Project[] = [];
+    let mentioned = false; // the raw list names an EchoHub, whether or not we could read its line
+    let cursor: string | undefined;
+    for (let page = 0; page < 5; page += 1) {
+      const list = await session.callTool(
+        TOOL_LIST_PROJECTS,
+        buildArguments(tools.get(TOOL_LIST_PROJECTS)!, { cursor }),
+      );
+      projects.push(...parseProjects(list));
+      mentioned ||= MENTIONS_HUB.test(list);
+      const next = listCursor(list);
+      // A tool that ignores the cursor would hand back the same page forever.
+      if (!next || next === cursor) break;
+      cursor = next;
+    }
+    return { projects, mentioned };
   }
 
   /**
@@ -311,18 +320,12 @@ export class XTilesHttpAdapter implements XTilesAdapter {
       const tools = await session.requireTools([TOOL_CREATE_PROJECT]);
 
       // A hub created earlier whose content we could not read back must not be
-      // created a second time: if the project we remembered still answers, leave it.
+      // created a second time: if the project we remembered is still in the list,
+      // leave it. A deleted project can still answer by id, so the list decides.
       if (tokens.projectId) {
-        try {
-          const structure = await session.requireTools([TOOL_STRUCTURE]);
-          await session.callTool(
-            TOOL_STRUCTURE,
-            buildArguments(structure.get(TOOL_STRUCTURE)!, { projectId: tokens.projectId }),
-          );
-          return "exists";
-        } catch {
-          // Gone, or not readable: carry on and create it.
-        }
+        const listTools = await session.requireTools([TOOL_LIST_PROJECTS]);
+        const { projects } = await this.listAllProjects(session, listTools);
+        if (projects.some((p) => p.id === tokens.projectId)) return "exists";
       }
 
       const reply = await session.callTool(
@@ -396,7 +399,7 @@ export class XTilesHttpAdapter implements XTilesAdapter {
 function toWriteError(error: unknown): Error {
   if (error instanceof XTilesNotConnectedError || error instanceof XTilesWriteError) return error;
   if (error instanceof HubNotFoundError) {
-    return new XTilesWriteError(`no EchoHub project${error.detail ? ` (${error.detail})` : ""}`, false);
+    return new XTilesWriteError(`no EchoHub project${error.detail ? ` (${error.detail})` : ""}`, false, true);
   }
   if (error instanceof McpError) {
     // Why it failed, for the receipt and the logs. A tool's own failure text is

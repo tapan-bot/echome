@@ -77,6 +77,8 @@ export class XTilesWriteError extends Error {
     readonly reason: string,
     /** Whether trying again might work. A 401 is not worth retrying. */
     readonly retryable: boolean,
+    /** There is no EchoHub in their workspace (it may have been deleted): setting one up is the fix. */
+    readonly hubMissing: boolean = false,
   ) {
     super(`xTiles write failed: ${reason}`);
   }

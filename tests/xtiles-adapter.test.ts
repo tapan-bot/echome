@@ -93,14 +93,18 @@ describe("reading what the person keeps", () => {
     expect(calls("xtiles_get_project_content").map((c) => c.args)).toEqual([{ project_id: "p-hub" }]);
   });
 
-  it("remembers which project is theirs, and does not look it up again", async () => {
+  it("remembers which project is theirs, and only checks it is still in the list", async () => {
     connect();
     await adapter.readMemory(USER);
     expect(stored().projectId).toBe("p-hub");
 
     xtiles.state.mcpCalls.length = 0;
     await adapter.readMemory(USER);
-    expect(calls("xtiles_list_projects")).toHaveLength(0);
+    // One look at the list (a deleted project can still answer by id), then
+    // straight to the remembered project: no search through the names.
+    expect(calls("xtiles_list_projects")).toHaveLength(1);
+    expect(calls("xtiles_get_project_content").map((c) => c.args?.project_id)).toEqual(["p-hub"]);
+    expect(stored().projectId).toBe("p-hub");
   });
 
   it("includes entries the app has already written, so the next conversation sees them", async () => {
@@ -299,6 +303,33 @@ describe("setting up the EchoHub", () => {
     expect(await adapter.write(USER, PAGE, "key-1")).toMatchObject({ ref: "p-hub/v-map" });
     expect(calls("xtiles_get_project_structure").length).toBeGreaterThan(0);
     expect(calls("xtiles_create_tiles_from_markdown_by_view")).toHaveLength(1);
+  });
+});
+
+describe("an EchoHub that was deleted", () => {
+  // The project is gone from the list, but asked for by its remembered id it can
+  // still answer, and writing to it then fails. The list is what to believe.
+  beforeEach(() => {
+    xtiles.state.hubPresent = false;
+    xtiles.state.deletedStillAnswers = true;
+    connect({ projectId: "p-hub" });
+  });
+
+  it("is reported as missing, not retried against the old project", async () => {
+    await expect(adapter.write(USER, PAGE, "key-1")).rejects.toMatchObject({
+      name: "XTilesWriteError",
+      hubMissing: true,
+      retryable: false,
+    });
+    expect(calls("xtiles_create_tiles_from_markdown_by_view")).toHaveLength(0);
+    expect(await adapter.checkWorkspace(USER)).toBe("no-hub");
+  });
+
+  it("is set up again, rather than reported as already there", async () => {
+    expect(await adapter.createHub(USER)).toBe("created");
+    expect(calls("xtiles_create_project_from_markdown")).toHaveLength(1);
+    expect(await adapter.checkWorkspace(USER)).toBe("ready");
+    expect(await adapter.write(USER, PAGE, "key-2")).toMatchObject({ ref: "p-hub/v-map" });
   });
 });
 

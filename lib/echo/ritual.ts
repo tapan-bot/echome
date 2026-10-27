@@ -180,11 +180,17 @@ export async function commitClosing(
       console.warn(`[ritual] xTiles write failed — ${failure}`);
       await markFailed(receiptId, failure);
       // THE SESSION IS NOT DESTROYED. This is the whole recovery path.
+      const hubMissing = error instanceof XTilesWriteError && error.hubMissing;
       throw new RitualError(
-        "I couldn't write this to your xTiles just now, so I haven't ended the conversation. " +
-          "It's exactly where you left it, and we can try again.",
+        hubMissing
+          ? "I couldn't find your EchoHub in your xTiles workspace, so I haven't ended the conversation. " +
+              "Open your account and choose “Set up my EchoHub”, then come back and finish. " +
+              "Your conversation is exactly where you left it."
+          : "I couldn't write this to your xTiles just now, so I haven't ended the conversation. " +
+              "It's exactly where you left it, and we can try again.",
         "write-failed",
-        retryable,
+        // Trying again changes nothing until the hub exists; the account page is the way forward.
+        hubMissing ? false : retryable,
       );
     }
   }

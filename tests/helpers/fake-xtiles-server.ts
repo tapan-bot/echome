@@ -39,6 +39,11 @@ export interface FakeXTilesState {
   emptyContent: boolean;
   /** List the hub in a layout whose project ids cannot be read. */
   listUnreadable: boolean;
+  /**
+   * A deleted hub is gone from the project list but can still answer when asked for
+   * by its id, as a project sitting in a trash might. Writing to it fails.
+   */
+  deletedStillAnswers: boolean;
   /** Make the next N MCP posts answer 401, as an expired token would. */
   rejectNext: number;
   sessionDeletes: number;
@@ -122,6 +127,7 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
     createFails: false,
     emptyContent: false,
     listUnreadable: false,
+    deletedStillAnswers: false,
     rejectNext: 0,
     sessionDeletes: 0,
     ...initial,
@@ -244,7 +250,7 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
               text({ projects: [{ id: "p-other", name: "EchoMe" }, ...(state.hubPresent ? [{ id: "p-hub", name: "EchoHub" }] : [])] }),
             );
           case "xtiles_get_project_content":
-            if (args.project_id !== "p-hub" || !state.hubPresent) {
+            if (args.project_id !== "p-hub" || (!state.hubPresent && !state.deletedStillAnswers)) {
               return rpcReply(response, message.id, { ...text("Project not found"), isError: true });
             }
             if (state.emptyContent) return rpcReply(response, message.id, text("# EchoHub\n\n_Nothing here yet_"));
@@ -277,7 +283,7 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
               text({ project_id: "p-hub", view_id: "v-compass", resource_url: "https://example.test/p-hub" }),
             );
           case "xtiles_get_project_structure":
-            if (args.project_id !== "p-hub" || !state.hubPresent) {
+            if (args.project_id !== "p-hub" || (!state.hubPresent && !state.deletedStillAnswers)) {
               return rpcReply(response, message.id, { ...text("Project not found"), isError: true });
             }
             return rpcReply(
@@ -291,7 +297,7 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
               }),
             );
           case "xtiles_create_tiles_from_markdown_by_view":
-            if (args.view_id !== "v-map") return rpcReply(response, message.id, { ...text("View not found"), isError: true });
+            if (args.view_id !== "v-map" || !state.hubPresent) return rpcReply(response, message.id, { ...text("View not found"), isError: true });
             state.mapEntries.push(String(args.markdown));
             return rpcReply(response, message.id, text("ok"));
           default:
