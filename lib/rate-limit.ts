@@ -32,6 +32,8 @@ export const LIMITS = {
   ritual: { max: 6, windowSeconds: 300 },
   /** Tidying dictation is a small, cheap call a person makes now and then. */
   tidy: { max: 20, windowSeconds: 60 },
+  /** Setting up the EchoHub: a button press, not something to repeat in a loop. */
+  hub: { max: 10, windowSeconds: 60 },
 } as const satisfies Record<string, Limit>;
 
 export type LimitName = keyof typeof LIMITS;

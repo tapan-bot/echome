@@ -34,7 +34,7 @@ interface Workspace {
 
 export class FakeXTiles implements XTilesAdapter {
   /** Set to make the next write fail, to exercise the recovery path. */
-  failNextWrite: { reason: string; retryable: boolean } | null = null;
+  failNextWrite: { reason: string; retryable: boolean; hubMissing?: boolean } | null = null;
 
   constructor(private readonly persistTo: string | null = null) {}
 
@@ -118,9 +118,9 @@ export class FakeXTiles implements XTilesAdapter {
 
   async write(userId: string, page: MapPage, idempotencyKey: string): Promise<WriteResult> {
     if (this.failNextWrite) {
-      const { reason, retryable } = this.failNextWrite;
+      const { reason, retryable, hubMissing } = this.failNextWrite;
       this.failNextWrite = null;
-      throw new XTilesWriteError(reason, retryable);
+      throw new XTilesWriteError(reason, retryable, hubMissing ?? false);
     }
 
     const all = this.load();

@@ -42,6 +42,8 @@ export type RitualFailure =
   | "no-session"
   | "distill-failed"
   | "not-connected"
+  /** There is no EchoHub to write to; setting one up is the way forward. */
+  | "hub-missing"
   | "write-failed";
 
 export class RitualError extends Error {
@@ -184,12 +186,11 @@ export async function commitClosing(
       throw new RitualError(
         hubMissing
           ? "I couldn't find your EchoHub in your xTiles workspace, so I haven't ended the conversation. " +
-              "Open your account and choose “Set up my EchoHub”, then come back and finish. " +
-              "Your conversation is exactly where you left it."
+              "You can set it up below and then try again. Your conversation is exactly where you left it."
           : "I couldn't write this to your xTiles just now, so I haven't ended the conversation. " +
               "It's exactly where you left it, and we can try again.",
-        "write-failed",
-        // Trying again changes nothing until the hub exists; the account page is the way forward.
+        hubMissing ? "hub-missing" : "write-failed",
+        // Trying again changes nothing until the hub exists, so the screen offers the setup instead.
         hubMissing ? false : retryable,
       );
     }

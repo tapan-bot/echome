@@ -20,6 +20,9 @@ import { fieldId, filledFields, formatEntryStamp, type Distillation } from "@/li
 
 type Stage = "confirm" | "distilling" | "choosing" | "writing" | "done" | "failed";
 
+/** Is there an EchoHub to keep things in? "unknown" means we could not tell, and nothing is blocked on a guess. */
+type HubStatus = "ready" | "no-hub" | "not-connected" | "unknown";
+
 interface Proposal {
   sessionId: string;
   distillation: Distillation;
@@ -34,6 +37,26 @@ export function ClosingRitual() {
   // retry writes the same heading and is recognised as the same entry, not a new one.
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [retryable, setRetryable] = useState(true);
+  const [failedKind, setFailedKind] = useState<string | null>(null);
+  const [hub, setHub] = useState<HubStatus>("unknown");
+  const [hubMade, setHubMade] = useState(false);
+
+  // Is there somewhere to keep what they choose? Asked up front, so that if there
+  // is not, they hear it here and can fix it, instead of when the save fails.
+  async function checkHub() {
+    try {
+      const response = await fetch("/api/xtiles/hub");
+      const body = (await response.json().catch(() => ({}))) as { status?: unknown };
+      const status = body.status;
+      setHub(status === "ready" || status === "no-hub" || status === "not-connected" ? status : "unknown");
+    } catch {
+      setHub("unknown");
+    }
+  }
+
+  useEffect(() => {
+    void checkHub();
+  }, []);
 
   // Leaving the page mid-ritual should not leave the conversation stuck in
   // 'closing', unable to accept new turns.
@@ -57,8 +80,9 @@ export function ClosingRitual() {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error(body.error ?? "Something went wrong.");
-      (error as Error & { retryable?: boolean }).retryable = body.retryable ?? true;
+      const error = new Error(body.error ?? "Something went wrong.") as Error & { retryable?: boolean; kind?: string };
+      error.retryable = body.retryable ?? true;
+      error.kind = body.kind;
       throw error;
     }
     return body;
@@ -72,11 +96,21 @@ export function ClosingRitual() {
       setProposal(result);
       setStartedAt(new Date());
       setStage("choosing");
+      // The answer from when the page opened may be stale, or have been "unknown".
+      if (hub !== "ready") void checkHub();
     } catch (error) {
-      setMessage((error as Error).message);
-      setRetryable((error as Error & { retryable?: boolean }).retryable ?? true);
-      setStage("failed");
+      failWith(error);
     }
+  }
+
+  function failWith(error: unknown) {
+    const failure = error as Error & { retryable?: boolean; kind?: string };
+    setMessage(failure.message);
+    setRetryable(failure.retryable ?? true);
+    setFailedKind(failure.kind ?? null);
+    if (failure.kind === "hub-missing") setHub("no-hub");
+    if (failure.kind === "not-connected") setHub("not-connected");
+    setStage("failed");
   }
 
   async function commit() {
@@ -95,9 +129,7 @@ export function ClosingRitual() {
       });
       setStage("done");
     } catch (error) {
-      setMessage((error as Error).message);
-      setRetryable((error as Error & { retryable?: boolean }).retryable ?? true);
-      setStage("failed");
+      failWith(error);
     }
   }
 
@@ -139,6 +171,8 @@ export function ClosingRitual() {
     const entry = proposal.distillation.entry;
     const fields = filledFields(proposal.distillation);
     const nothing = !entry || fields.length === 0;
+    // Only a write needs somewhere to write to: ending without keeping anything never does.
+    const blocked = kept.size > 0 && (hub === "no-hub" || hub === "not-connected");
 
     return (
       <Shell title="What would you like to keep?">
@@ -176,10 +210,21 @@ export function ClosingRitual() {
           </Group>
         ) : null}
 
+        {kept.size > 0 && hub === "no-hub" ? (
+          <HubSetup
+            onReady={() => {
+              setHub("ready");
+              setHubMade(true);
+            }}
+          />
+        ) : null}
+        {kept.size > 0 && hub === "not-connected" ? <ConnectXTiles onLeave={() => post({ action: "abandon" })} /> : null}
+        {hubMade && hub === "ready" ? <HubReady /> : null}
+
         <NoGoingBack final />
 
         <div className="mt-1 flex flex-wrap items-center gap-3">
-          <Primary onClick={commit}>
+          <Primary onClick={commit} disabled={blocked}>
             {kept.size === 0
               ? "End without keeping anything"
               : `Keep ${kept.size} ${kept.size === 1 ? "part" : "parts"} and end`}
@@ -218,8 +263,20 @@ export function ClosingRitual() {
       <p className="rounded-xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm leading-relaxed text-ink">
         {message}
       </p>
+      {failedKind === "hub-missing" && hub !== "ready" ? (
+        <HubSetup
+          onReady={() => {
+            setHub("ready");
+            setHubMade(true);
+          }}
+        />
+      ) : null}
+      {failedKind === "not-connected" ? <ConnectXTiles onLeave={() => post({ action: "abandon" })} /> : null}
+      {failedKind === "hub-missing" && hub === "ready" ? <HubReady /> : null}
       <div className="flex flex-wrap gap-3">
-        {retryable ? <Primary onClick={proposal ? commit : begin}>Try again</Primary> : null}
+        {retryable || (failedKind === "hub-missing" && hub === "ready") ? (
+          <Primary onClick={proposal ? commit : begin}>Try again</Primary>
+        ) : null}
         <Secondary href="/chat" onNavigate={() => post({ action: "abandon" })}>
           Back to the conversation
         </Secondary>
@@ -328,11 +385,89 @@ function Choice({
   );
 }
 
-function Primary({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+/**
+ * There is no EchoHub in their xTiles yet. Offered, never done unasked: the
+ * button creates it from the template, and only when they press it.
+ */
+function HubSetup({ onReady }: { onReady: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  async function setUp() {
+    setBusy(true);
+    setFailed(false);
+    try {
+      const response = await fetch("/api/xtiles/hub", { method: "POST" });
+      const body = (await response.json().catch(() => ({}))) as { status?: unknown };
+      if (response.ok && (body.status === "created" || body.status === "exists")) onReady();
+      else setFailed(true);
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div role="status" className="flex flex-col gap-3 rounded-xl border border-accent/40 bg-accent-soft px-4 py-3 text-sm leading-relaxed">
+      <p>
+        <strong className="font-medium">Your EchoHub isn&rsquo;t in your xTiles yet.</strong> That&rsquo;s where what
+        you keep is written. I can set it up from the template now. Nothing in your workspace changes until you press the
+        button, and your conversation stays right here.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <Primary onClick={setUp} disabled={busy}>
+          {busy ? "Setting up…" : "Set up my EchoHub"}
+        </Primary>
+        {failed ? (
+          <span role="alert" className="text-warn">
+            That didn&rsquo;t work. Try again, or set it up from your account.
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function HubReady() {
+  return (
+    <p role="status" className="rounded-xl border border-success/40 bg-success-soft px-4 py-2.5 text-sm text-ink">
+      Your EchoHub is ready in your xTiles.
+    </p>
+  );
+}
+
+/** xTiles is not connected at all, so there is nowhere to keep anything yet. */
+function ConnectXTiles({ onLeave }: { onLeave: () => Promise<unknown> }) {
+  return (
+    <div role="status" className="flex flex-col gap-3 rounded-xl border border-accent/40 bg-accent-soft px-4 py-3 text-sm leading-relaxed">
+      <p>
+        <strong className="font-medium">xTiles isn&rsquo;t connected yet,</strong> so there&rsquo;s nowhere to keep this.
+        Connect it from your account, then come back and finish. Your conversation will be right where you left it.
+      </p>
+      <div>
+        <Secondary href="/account" onNavigate={onLeave}>
+          Connect xTiles
+        </Secondary>
+      </div>
+    </div>
+  );
+}
+
+function Primary({
+  onClick,
+  disabled,
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className="rounded-full bg-accent px-6 py-2.5 text-base font-medium text-on-accent transition disabled:opacity-50"
     >
       {children}

@@ -152,6 +152,25 @@ describe("when the xTiles write fails", () => {
     expect((error as RitualError).retryable).toBe(true);
   });
 
+  it("says the hub is missing, and that it can be set up, when there is none to write to", async () => {
+    const store = new InMemorySessionStore();
+    const xtiles = new FakeXTiles();
+    const id = await conversation(store);
+    const proposal = await proposeClosing(store, USER);
+
+    xtiles.failNextWrite = { reason: "no EchoHub project", retryable: false, hubMissing: true };
+
+    const error = (await commitClosing(store, xtiles, USER, id, ["entry-theme"], proposal.distillation).catch(
+      (e: RitualError) => e,
+    )) as RitualError;
+
+    expect(error.kind).toBe("hub-missing");
+    expect(error.retryable).toBe(false);
+    expect(error.message).toMatch(/set it up below/i);
+    // And nothing was lost: the conversation is still there.
+    expect(await store.find(id, USER)).not.toBeNull();
+  });
+
   it("succeeds on retry, and writes exactly once", async () => {
     const store = new InMemorySessionStore();
     const xtiles = new FakeXTiles();
