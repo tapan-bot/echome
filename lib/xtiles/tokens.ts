@@ -32,6 +32,11 @@ export interface XTilesTokens {
   readonly clientId: string;
   /** Their EchoHub project, once found. */
   readonly projectId: string | null;
+  /**
+   * When EchoMe made that project (epoch ms), if it did. A project made a moment ago may not
+   * be in xTiles' project list yet, so for a little while it is trusted without the list.
+   */
+  readonly projectMadeAt?: number | null;
 }
 
 const TABLE = "xtiles_connections";
@@ -60,6 +65,7 @@ export async function saveTokens(userId: string, tokens: XTilesTokens): Promise<
       refreshToken: tokens.refreshToken,
       clientId: tokens.clientId,
       projectId: tokens.projectId,
+      projectMadeAt: tokens.projectMadeAt ?? null,
     }),
     dataKey,
     aad(userId),
@@ -110,6 +116,7 @@ export async function readTokens(userId: string): Promise<XTilesTokens | null> {
     refreshToken: string | null;
     clientId?: string;
     projectId?: string | null;
+    projectMadeAt?: number | null;
   };
 
   return {
@@ -119,6 +126,7 @@ export async function readTokens(userId: string): Promise<XTilesTokens | null> {
     workspaceId: data.workspace_id,
     clientId: parsed.clientId ?? "",
     projectId: parsed.projectId ?? null,
+    projectMadeAt: parsed.projectMadeAt ?? null,
   };
 }
 

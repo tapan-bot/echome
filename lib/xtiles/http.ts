@@ -43,6 +43,16 @@ import {
  * page is the person's own.
  */
 
+/**
+ * How long after making a hub it is trusted without the project list agreeing. The list can
+ * lag behind a new project, and treating a hub made a moment ago as missing is how a second
+ * one gets made.
+ */
+const FRESH_HUB_MS = 15 * 60_000;
+
+const recentlyMade = (tokens: XTilesTokens): boolean =>
+  typeof tokens.projectMadeAt === "number" && Date.now() - tokens.projectMadeAt < FRESH_HUB_MS;
+
 /** Does this text name an EchoHub at all, however the line around it is written? */
 const MENTIONS_HUB = /echo[\s_-]*hub/i;
 
@@ -234,7 +244,7 @@ export class XTilesHttpAdapter implements XTilesAdapter {
     // remembered id counts only while the list still shows it. A list that cannot
     // be read at all proves nothing, so then the remembered id is trusted.
     const { projects, mentioned } = await this.listAllProjects(session, tools);
-    if (tokens.projectId && (projects.length === 0 || projects.some((p) => p.id === tokens.projectId))) {
+    if (tokens.projectId && (projects.length === 0 || recentlyMade(tokens) || projects.some((p) => p.id === tokens.projectId))) {
       const content = await read(tokens.projectId);
       if (content.compass || content.map) return { projectId: tokens.projectId, ...content };
       // Replaced: fall through and look again.
@@ -252,12 +262,13 @@ export class XTilesHttpAdapter implements XTilesAdapter {
 
     const content = await read(project.id);
     if (!content.compass && !content.map) {
-      throw new HubNotFoundError("EchoHub found, but neither an EchoCompass nor an EchoMap page was in it");
+      // It is there, only empty or laid out differently: making another would leave them with two.
+      throw new HubNotFoundError("EchoHub found, but neither an EchoCompass nor an EchoMap page was in it", true);
     }
 
     if (tokens.projectId !== project.id) {
       // Remember it. Failing to is no reason to fail the operation.
-      await saveTokens(userId, { ...tokens, projectId: project.id }).catch(() => undefined);
+      await saveTokens(userId, { ...tokens, projectId: project.id, projectMadeAt: null }).catch(() => undefined);
     }
     return { projectId: project.id, ...content };
   }
@@ -317,6 +328,18 @@ export class XTilesHttpAdapter implements XTilesAdapter {
    * write the hub must be able to find it again before this counts as done.
    */
   async createHub(userId: string, options: { replace?: boolean } = {}): Promise<"created" | "exists"> {
+    // Two presses at once (a double click, two tabs) must make one hub, not two.
+    const key = `${userId}:${options.replace === true}`;
+    const running = XTilesHttpAdapter.creating.get(key);
+    if (running) return running;
+    const work = this.makeHub(userId, options).finally(() => XTilesHttpAdapter.creating.delete(key));
+    XTilesHttpAdapter.creating.set(key, work);
+    return work;
+  }
+
+  private static readonly creating = new Map<string, Promise<"created" | "exists">>();
+
+  private async makeHub(userId: string, options: { replace?: boolean }): Promise<"created" | "exists"> {
     return this.withSession(userId, async (session, tokens) => {
       // `replace`: they were told xTiles refused the entry and asked for a fresh hub,
       // so a listed one is not a reason to stop. Otherwise one that is there is left alone.
@@ -341,6 +364,19 @@ export class XTilesHttpAdapter implements XTilesAdapter {
         const listTools = await session.requireTools([TOOL_LIST_PROJECTS]);
         const { projects } = await this.listAllProjects(session, listTools);
         if (projects.some((p) => p.id === tokens.projectId)) return "exists";
+        // One made a moment ago may not be in the list yet: if it answers, it is theirs.
+        if (recentlyMade(tokens)) {
+          try {
+            const structure = await session.requireTools([TOOL_STRUCTURE]);
+            await session.callTool(
+              TOOL_STRUCTURE,
+              buildArguments(structure.get(TOOL_STRUCTURE)!, { projectId: tokens.projectId }),
+            );
+            return "exists";
+          } catch {
+            // Not answering: carry on and make one.
+          }
+        }
       }
 
       const reply = await session.callTool(
@@ -352,8 +388,15 @@ export class XTilesHttpAdapter implements XTilesAdapter {
         throw new McpError("protocol", false, "The EchoHub was created, but its id could not be read.");
       }
       // Remember it before anything else can fail, so a retry finds it.
-      await saveTokens(userId, { ...tokens, projectId });
-      await this.loadHub(session, { ...tokens, projectId }, userId);
+      const made = { ...tokens, projectId, projectMadeAt: Date.now() };
+      await saveTokens(userId, made);
+      try {
+        await this.loadHub(session, made, userId);
+      } catch (error) {
+        // It was made and its id is kept. Not being able to read it back this very moment is no
+        // reason to say it failed, and so to make a second one on the next press.
+        if (!(error instanceof HubNotFoundError)) throw error;
+      }
       return "created";
     });
   }

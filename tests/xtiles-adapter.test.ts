@@ -306,6 +306,37 @@ describe("setting up the EchoHub", () => {
   });
 });
 
+describe("never making a second EchoHub", () => {
+  it("trusts a hub it has just made even while the project list has not caught up", async () => {
+    xtiles.state.hubPresent = false;
+    xtiles.state.hideFromList = true;
+    connect();
+
+    expect(await adapter.createHub(USER)).toBe("created");
+    // The list still does not show it. Pressing again, or finishing the conversation,
+    // must find the one that was made, not make another.
+    expect(await adapter.createHub(USER)).toBe("exists");
+    expect(await adapter.write(USER, PAGE, "key-1")).toMatchObject({ ref: "p-hub/v-map" });
+    expect(calls("xtiles_create_project_from_markdown")).toHaveLength(1);
+  });
+
+  it("makes one hub when the button is pressed twice at once", async () => {
+    xtiles.state.hubPresent = false;
+    connect();
+
+    const [first, second] = await Promise.all([adapter.createHub(USER), adapter.createHub(USER)]);
+    expect([first, second]).toEqual(["created", "created"]);
+    expect(calls("xtiles_create_project_from_markdown")).toHaveLength(1);
+  });
+
+  it("leaves a listed hub alone even when it is empty and nothing is remembered", async () => {
+    xtiles.state.emptyContent = true;
+    connect();
+    expect(await adapter.createHub(USER)).toBe("exists");
+    expect(calls("xtiles_create_project_from_markdown")).toHaveLength(0);
+  });
+});
+
 describe("xTiles refusing an entry", () => {
   // The hub is listed and readable, but xTiles will not take a write to it: the
   // case of a hub that was deleted or moved yet still shows up.
