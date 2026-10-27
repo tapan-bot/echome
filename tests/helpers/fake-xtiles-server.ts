@@ -48,6 +48,10 @@ export interface FakeXTilesState {
   hideFromList: boolean;
   /** Reading a project's content fails, as for a project xTiles has not finished setting up. */
   contentFails: boolean;
+  /** The create-project reply names no id, as a reply in an unexpected layout would. */
+  createReplyHasNoId: boolean;
+  /** A second EchoHub is in the workspace, as an earlier attempt would have left. */
+  secondHub: boolean;
   /** Make every write to the EchoMap page fail, as xTiles refusing an entry would. */
   rejectWrites: boolean;
   /** Make the next N MCP posts answer 401, as an expired token would. */
@@ -135,6 +139,8 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
     listUnreadable: false,
     deletedStillAnswers: false,
     rejectWrites: false,
+    createReplyHasNoId: false,
+    secondHub: false,
     contentFails: false,
     hideFromList: false,
     rejectNext: 0,
@@ -256,7 +262,7 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
             return rpcReply(
               response,
               message.id,
-              text({ projects: [{ id: "p-other", name: "EchoMe" }, ...(state.hubPresent && !state.hideFromList ? [{ id: "p-hub", name: "EchoHub" }] : [])] }),
+              text({ projects: [{ id: "p-other", name: "EchoMe" }, ...(state.hubPresent && !state.hideFromList ? [{ id: "p-hub", name: "EchoHub" }] : []), ...(state.secondHub ? [{ id: "p-hub-2", name: "EchoHub" }] : [])] }),
             );
           case "xtiles_get_project_content":
             if (state.contentFails) return rpcReply(response, message.id, { ...text("Not ready"), isError: true });
@@ -287,6 +293,7 @@ export async function startFakeXTiles(initial: Partial<FakeXTilesState> = {}): P
             if (state.createFails) return rpcReply(response, message.id, { ...text("Could not create"), isError: true });
             state.createdMarkdown = String(args.markdown);
             state.hubPresent = true;
+            if (state.createReplyHasNoId) return rpcReply(response, message.id, text("Done. Your project was created."));
             return rpcReply(
               response,
               message.id,

@@ -323,7 +323,7 @@ describe("never making a second EchoHub", () => {
   it("says a fresh hub was made, and does not make another, when it cannot be read back yet", async () => {
     // xTiles made it but is not ready to show its content: that is no failure, and pressing
     // "set up a fresh EchoHub" again must not leave them with three.
-    xtiles.state.rejectWrites = true;
+    xtiles.state.hubPresent = false;
     connect({ projectId: "p-old" });
     xtiles.state.contentFails = true;
 
@@ -331,6 +331,27 @@ describe("never making a second EchoHub", () => {
     expect(await adapter.createHub(USER, { replace: true })).toBe("exists");
     expect(await adapter.createHub(USER, { replace: true })).toBe("exists");
     expect(calls("xtiles_create_project_from_markdown")).toHaveLength(1);
+  });
+
+  it("finds the hub it made from the project list when the reply names no id", async () => {
+    xtiles.state.hubPresent = false;
+    xtiles.state.createReplyHasNoId = true;
+    connect();
+
+    expect(await adapter.createHub(USER)).toBe("created");
+    expect(stored().projectId).toBe("p-hub");
+    expect(await adapter.createHub(USER)).toBe("exists");
+    expect(calls("xtiles_create_project_from_markdown")).toHaveLength(1);
+  });
+
+  it("moves to another EchoHub that is already there instead of making a new one", async () => {
+    // An earlier attempt left a second hub. "A fresh EchoHub" uses it rather than piling up more.
+    xtiles.state.secondHub = true;
+    connect({ projectId: "p-hub" });
+
+    expect(await adapter.createHub(USER, { replace: true })).toBe("exists");
+    expect(calls("xtiles_create_project_from_markdown")).toHaveLength(0);
+    expect(stored().projectId).toBe("p-hub-2");
   });
 
   it("makes one hub when the button is pressed twice at once", async () => {

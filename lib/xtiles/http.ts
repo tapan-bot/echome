@@ -382,12 +382,42 @@ export class XTilesHttpAdapter implements XTilesAdapter {
         }
       }
 
-      const reply = await session.callTool(
-        TOOL_CREATE_PROJECT,
-        buildArguments(tools.get(TOOL_CREATE_PROJECT)!, { markdown: hubMarkdown() }),
-      );
-      const { projectId } = parseCreated(reply);
+      // What the workspace holds now, so that anything made from here on can be told apart.
+      // Best effort: a list that cannot be read only means less is known.
+      const listTools = await session.requireTools([TOOL_LIST_PROJECTS]);
+      const { projects: before } = await this.listAllProjects(session, listTools).catch(() => ({
+        projects: [] as Project[],
+      }));
+      const knownBefore = new Set(before.map((project) => project.id));
+
+      // A fresh hub means moving off the one that failed, not piling up more. If another EchoHub
+      // is already in their workspace (an earlier attempt may have made one), use that.
+      if (options.replace) {
+        const other = pickHub(before.filter((project) => project.id !== tokens.projectId));
+        if (other) {
+          await saveTokens(userId, { ...tokens, projectId: other.id, projectMadeAt: Date.now() });
+          return "exists";
+        }
+      }
+
+      let projectId: string | null = null;
+      let failure: unknown = null;
+      try {
+        const reply = await session.callTool(
+          TOOL_CREATE_PROJECT,
+          buildArguments(tools.get(TOOL_CREATE_PROJECT)!, { markdown: hubMarkdown() }),
+        );
+        projectId = parseCreated(reply).projectId;
+      } catch (error) {
+        failure = error;
+      }
       if (!projectId) {
+        // No id came back, or the call reported an error: xTiles may have made it all the same.
+        // Look for an EchoHub that was not there before, rather than risk making a second.
+        projectId = await this.findNewHub(session, listTools, knownBefore);
+      }
+      if (!projectId) {
+        if (failure) throw failure;
         throw new McpError("protocol", false, "The EchoHub was created, but its id could not be read.");
       }
       // Remember it before anything else can fail, so a retry finds it.
@@ -402,6 +432,28 @@ export class XTilesHttpAdapter implements XTilesAdapter {
       }
       return "created";
     });
+  }
+
+  /**
+   * An EchoHub in the workspace that was not there before: a few looks, because a project that
+   * has just been made can take a moment to show in the list.
+   */
+  private async findNewHub(
+    session: McpSession,
+    listTools: Awaited<ReturnType<McpSession["requireTools"]>>,
+    knownBefore: ReadonlySet<string>,
+  ): Promise<string | null> {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1200));
+      try {
+        const { projects } = await this.listAllProjects(session, listTools);
+        const found = pickHub(projects.filter((project) => !knownBefore.has(project.id)));
+        if (found) return found.id;
+      } catch {
+        // Try again; nothing is lost by looking twice.
+      }
+    }
+    return null;
   }
 
   /**
