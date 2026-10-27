@@ -222,6 +222,25 @@ describe("when the xTiles write fails", () => {
 
     expect(store.peek(id)).toBeDefined();
   });
+
+  it("does not end the conversation even when nothing is kept, if xTiles is not connected", async () => {
+    const store = new InMemorySessionStore();
+    const notConnected = new FakeXTiles();
+    vi.spyOn(notConnected, "isConnected").mockResolvedValue(false);
+
+    const id = await conversation(store);
+    const proposal = await proposeClosing(store, USER);
+
+    const error = (await commitClosing(store, notConnected, USER, id, [], proposal.distillation).catch(
+      (e: RitualError) => e,
+    )) as RitualError;
+
+    expect(error.kind).toBe("not-connected");
+    expect(error.message).toMatch(/haven't ended the conversation/i);
+    // The chat is still there, and still readable by its own key.
+    expect(store.peek(id)).toBeDefined();
+    expect(await store.find(id, USER)).not.toBeNull();
+  });
 });
 
 describe("idempotency", () => {

@@ -97,7 +97,7 @@ export function ClosingRitual() {
       setStartedAt(new Date());
       setStage("choosing");
       // The answer from when the page opened may be stale, or have been "unknown".
-      if (hub !== "ready") void checkHub();
+      void checkHub();
     } catch (error) {
       failWith(error);
     }
@@ -142,6 +142,21 @@ export function ClosingRitual() {
     });
   }
 
+  if (stage === "confirm" && hub === "not-connected") {
+    return (
+      <Shell title="A short summary?">
+        <p className="text-ink-soft">
+          I can draw out a short summary of what stood out, for you to read here. xTiles isn&rsquo;t connected, so
+          there&rsquo;s nowhere to keep anything, and I won&rsquo;t end this conversation. It stays exactly as it is.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-3">
+          <Primary onClick={begin}>Show me a summary</Primary>
+          <Secondary href="/chat">Not yet</Secondary>
+        </div>
+      </Shell>
+    );
+  }
+
   if (stage === "confirm") {
     return (
       <Shell title="Finish this conversation?">
@@ -172,7 +187,42 @@ export function ClosingRitual() {
     const fields = filledFields(proposal.distillation);
     const nothing = !entry || fields.length === 0;
     // Only a write needs somewhere to write to: ending without keeping anything never does.
-    const blocked = kept.size > 0 && (hub === "no-hub" || hub === "not-connected");
+    const blocked = kept.size > 0 && hub === "no-hub";
+
+    // Not connected: there is nowhere to keep anything, so this is a summary to read and
+    // nothing more. The conversation is not ended, and nothing here is saved.
+    if (hub === "not-connected") {
+      return (
+        <Shell title="A short summary">
+          <p className="text-ink-soft">
+            {nothing
+              ? "Nothing stood out clearly enough to summarise yet. Keep talking, and ask again later."
+              : "Here\u2019s what stood out. xTiles isn\u2019t connected, so there\u2019s nowhere to keep it, and I haven\u2019t ended the conversation. It\u2019s still here exactly as you left it."}
+          </p>
+          {entry && fields.length > 0 ? (
+            <Group title={entry.title} subtitle="What stood out in this conversation">
+              {fields.map((field) => (
+                <div key={field.key} className="flex flex-col gap-0.5 rounded-xl border border-line px-4 py-3">
+                  <span className="text-xs uppercase tracking-wide text-ink-soft">{field.label}</span>
+                  <span className="text-base leading-snug">{field.text}</span>
+                </div>
+              ))}
+              <p className="px-1 text-xs leading-relaxed text-ink-soft">
+                This is only shown here. It isn&rsquo;t saved anywhere. Connect xTiles to keep what matters.
+              </p>
+            </Group>
+          ) : null}
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            <Secondary primary href="/account" onNavigate={() => post({ action: "abandon" })}>
+              Connect xTiles
+            </Secondary>
+            <Secondary href="/chat" onNavigate={() => post({ action: "abandon" })}>
+              Back to the conversation
+            </Secondary>
+          </div>
+        </Shell>
+      );
+    }
 
     return (
       <Shell title="What would you like to keep?">
@@ -218,7 +268,6 @@ export function ClosingRitual() {
             }}
           />
         ) : null}
-        {kept.size > 0 && hub === "not-connected" ? <ConnectXTiles onLeave={() => post({ action: "abandon" })} /> : null}
         {hubMade && hub === "ready" ? <HubReady /> : null}
 
         <NoGoingBack final />
@@ -494,10 +543,13 @@ function Secondary({
   href,
   children,
   onNavigate,
+  primary = false,
 }: {
   href: string;
   children: React.ReactNode;
   onNavigate?: () => Promise<unknown> | void;
+  /** Looks like the main button, for when this is the thing to do next. */
+  primary?: boolean;
 }) {
   return (
     <a
@@ -517,7 +569,11 @@ function Secondary({
             }
           : undefined
       }
-      className="rounded-full border border-line px-6 py-2.5 text-base text-ink-soft transition hover:border-accent hover:text-ink"
+      className={
+        primary
+          ? "rounded-full bg-accent px-6 py-2.5 text-base font-medium text-on-accent transition"
+          : "rounded-full border border-line px-6 py-2.5 text-base text-ink-soft transition hover:border-accent hover:text-ink"
+      }
     >
       {children}
     </a>

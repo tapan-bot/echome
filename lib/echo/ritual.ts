@@ -137,6 +137,18 @@ export async function commitClosing(
     throw new RitualError("That conversation is no longer open.", "no-session", false);
   }
 
+  // Without xTiles there is nowhere to keep anything, and ending the conversation would
+  // destroy it for nothing. So it is never ended: not even "keeping nothing", which would
+  // quietly remove a chat the person has no other copy of.
+  if (!(await xtiles.isConnected(userId))) {
+    throw new RitualError(
+      "Your xTiles workspace isn't connected, so I haven't ended the conversation. " +
+        "It stays here exactly as it is. Connect xTiles from your account to keep what matters.",
+      "not-connected",
+      true,
+    );
+  }
+
   const kept = keepOnly(distillation, keptIds);
   const keptCount = countFields(kept);
   const receiptId = randomUUID();
@@ -158,16 +170,6 @@ export async function commitClosing(
   let ref: string | null = null;
 
   if (kept.entry) {
-    if (!(await xtiles.isConnected(userId))) {
-      await markFailed(receiptId, "XTilesNotConnectedError");
-      throw new RitualError(
-        "Your xTiles workspace isn't connected, so there's nowhere to keep this yet. " +
-          "Your conversation is safe and still here.",
-        "not-connected",
-        true,
-      );
-    }
-
     try {
       const page = buildMapPage(
         kept.entry,
