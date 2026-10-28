@@ -116,6 +116,7 @@ export async function POST(request: NextRequest) {
             ? "Your access has lapsed. You can restart it from your account page."
             : "This is where the free conversation ends. Choosing a plan keeps it going.",
         needsPurchase: true,
+        reason: access.reason,
       },
       { status: 402 },
     );

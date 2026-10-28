@@ -9,6 +9,7 @@ import { findStranded, resumeOrStartSession } from "@/lib/echo/sessions";
 import { classifyError } from "@/lib/echo/telemetry";
 import { toDisplayTurns, type DisplayTurn } from "@/lib/echo/transcript";
 import { currentUser } from "@/lib/auth/current-user";
+import { accessFor } from "@/lib/billing/entitlements";
 
 /**
  * Resuming happens here, and it is the whole product in one function: the
@@ -37,13 +38,21 @@ export default async function ChatPage() {
     throw error;
   }
 
+  // No access right now (the free conversation is used, or a plan lapsed): the plans are shown
+  // straight away. A failure to check must never lock someone out, so any doubt means "carry on".
+  const purchase = await accessFor(user.id)
+    .then((access) =>
+      access.allowed ? null : access.reason === "lapsed" ? ("lapsed" as const) : ("needs-purchase" as const),
+    )
+    .catch(() => null);
+
   return (
     <>
       {/* No trailing slot here any more — the account icon is mounted globally
           (components/AccountMenu.tsx, in app/layout.tsx) so it sits in the same
           top-right spot on every page, not just this one. */}
       <BrandHeader />
-      <Conversation initialTurns={turns} />
+      <Conversation initialTurns={turns} initialPurchase={purchase} />
     </>
   );
 }
@@ -69,7 +78,7 @@ function StrandedChoice() {
           type="submit"
           name="choice"
           value="resume"
-          className="rounded-full bg-accent px-6 py-2.5 text-base font-medium text-on-accent"
+          className="fx-primary rounded-full bg-accent px-6 py-2.5 text-base font-medium text-on-accent"
         >
           Pick it up
         </button>
@@ -77,7 +86,7 @@ function StrandedChoice() {
           type="submit"
           name="choice"
           value="fresh"
-          className="rounded-full border border-line px-6 py-2.5 text-base text-ink-soft transition hover:border-accent hover:text-ink"
+          className="rounded-full border border-line px-6 py-2.5 text-base text-ink-soft fx-soft"
         >
           Start something new
         </button>

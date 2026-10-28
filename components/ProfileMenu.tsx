@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import { TIERS } from "@/lib/config/pricing";
+
 /**
  * The avatar in the header. Click it and a frosted glass panel drops down —
  * identity up top, then the places the rest of the account lives, styled
@@ -12,11 +14,14 @@ import { useEffect, useRef, useState } from "react";
 export function ProfileMenu({
   email,
   planLabel,
+  tier,
   xtilesConnected,
   signOutAction,
 }: {
   email: string | null;
   planLabel: string;
+  /** The plan they pay for now, or "none" (free, or lapsed). */
+  tier: "none" | "access" | "founders";
   xtilesConnected: boolean;
   signOutAction: () => Promise<void>;
 }) {
@@ -53,7 +58,7 @@ export function ProfileMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Account menu"
-        className="flex size-9 items-center justify-center rounded-full bg-accent text-sm font-medium text-on-accent transition hover:opacity-90"
+        className="flex size-9 items-center justify-center rounded-full bg-accent text-sm font-medium text-on-accent fx-primary"
       >
         {initial}
       </button>
@@ -84,6 +89,23 @@ export function ProfileMenu({
           </div>
 
           <div className="flex flex-col gap-0.5 p-1.5">
+            {tier === "none" ? (
+              <UpgradeLink
+                href="/pricing"
+                title="Upgrade plan"
+                hint={`From ${TIERS.access.displayPrice}`}
+                onNavigate={() => setOpen(false)}
+              />
+            ) : (
+              // They already pay, so a second checkout would start a second subscription.
+              // Changing or managing a plan is done in Stripe's own customer portal.
+              <form action="/api/stripe/portal" method="post">
+                <UpgradeButton
+                  title={tier === "access" ? "Upgrade to Founders" : "Manage plan"}
+                  hint={tier === "access" ? TIERS.founders.displayPrice : TIERS[tier].name}
+                />
+              </form>
+            )}
             <MenuLink href="/account" onNavigate={() => setOpen(false)} icon={<TilesIcon />}>
               <span className="flex flex-1 items-center justify-between">
                 xTiles integration
@@ -139,13 +161,57 @@ function MenuLink({
       href={href}
       role="menuitem"
       onClick={onNavigate}
-      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink-soft transition hover:bg-accent-soft hover:text-ink"
+      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink-soft transition hover:translate-x-0.5 hover:bg-accent-soft hover:text-ink"
     >
       <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-page text-ink-soft">
         {icon}
       </span>
       {children}
     </Link>
+  );
+}
+
+/** The row that stands out in the menu: where to go to pay for more. */
+function UpgradeLink({
+  href,
+  title,
+  hint,
+  onNavigate,
+}: {
+  href: string;
+  title: string;
+  hint: string;
+  onNavigate: () => void;
+}) {
+  return (
+    <Link href={href} role="menuitem" onClick={onNavigate} className={UPGRADE_CLASS}>
+      <UpgradeBody title={title} hint={hint} />
+    </Link>
+  );
+}
+
+function UpgradeButton({ title, hint }: { title: string; hint: string }) {
+  return (
+    <button type="submit" role="menuitem" className={`${UPGRADE_CLASS} w-full text-left`}>
+      <UpgradeBody title={title} hint={hint} />
+    </button>
+  );
+}
+
+const UPGRADE_CLASS =
+  "fx-primary flex items-center gap-3 rounded-xl bg-accent px-3 py-2.5 text-sm text-on-accent";
+
+function UpgradeBody({ title, hint }: { title: string; hint: string }) {
+  return (
+    <>
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-on-accent/15">
+        <ArrowUpIcon />
+      </span>
+      <span className="flex flex-1 items-center justify-between gap-2">
+        <span className="font-medium">{title}</span>
+        <span className="text-xs opacity-85">{hint}</span>
+      </span>
+    </>
   );
 }
 
@@ -208,6 +274,14 @@ function ShieldIcon() {
   return (
     <svg {...ICON_PROPS}>
       <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3Z" />
+    </svg>
+  );
+}
+
+function ArrowUpIcon() {
+  return (
+    <svg {...ICON_PROPS}>
+      <path d="M12 19V5M5.5 11.5 12 5l6.5 6.5" />
     </svg>
   );
 }

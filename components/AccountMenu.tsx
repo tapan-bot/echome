@@ -26,6 +26,8 @@ export async function AccountMenu() {
     (await xtiles()).isConnected(user.id).catch(() => false),
   ]);
   const planLabel = entitlement.tier === "none" ? "Free" : TIERS[entitlement.tier].name;
+  // Paying now: a plan that is active, or one whose card is being retried. Anything else can upgrade.
+  const paying = entitlement.tier !== "none" && (entitlement.status === "active" || entitlement.status === "past_due");
 
   return (
     <div
@@ -35,6 +37,7 @@ export async function AccountMenu() {
       <ProfileMenu
         email={user.email}
         planLabel={planLabel}
+        tier={paying ? entitlement.tier : "none"}
         xtilesConnected={xtilesConnected}
         signOutAction={LOCAL_MODE ? localSignOut : signOut}
       />

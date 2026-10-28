@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Composer } from "@/components/chat/Composer";
 import { CrisisPanel } from "@/components/chat/CrisisPanel";
 import { Disclaimer } from "@/components/chat/Disclaimer";
+import { PlanCards } from "@/components/PlanCards";
 import { EchoDots } from "@/components/EchoLoader";
 import { GENERIC_ERROR } from "@/lib/echo/messages";
 import type { DisplayTurn } from "@/lib/echo/transcript";
@@ -20,11 +21,13 @@ import type { DisplayTurn } from "@/lib/echo/transcript";
 
 interface ConversationProps {
   readonly initialTurns: readonly DisplayTurn[];
+  /** Set when they have no access at the moment the page opens: the plans are shown at once. */
+  readonly initialPurchase?: "needs-purchase" | "lapsed" | null;
 }
 
 type Notice = { readonly kind: "error" | "refusal"; readonly text: string } | null;
 
-export function Conversation({ initialTurns }: ConversationProps) {
+export function Conversation({ initialTurns, initialPurchase = null }: ConversationProps) {
   const [turns, setTurns] = useState<DisplayTurn[]>([...initialTurns]);
   /** The reply currently arriving, token by token. */
   const [streaming, setStreaming] = useState<string | null>(null);
@@ -33,13 +36,18 @@ export function Conversation({ initialTurns }: ConversationProps) {
   /** Set by the watchman. Sticky for the rest of the session, never dismissed
       automatically — it should not vanish while someone is reading it. */
   const [flagged, setFlagged] = useState(false);
-  /** Their free conversation has ended, or their access lapsed. */
-  const [needsPurchase, setNeedsPurchase] = useState(false);
+  /** Their free conversation has ended, or their access lapsed. The plans are shown in place of the box. */
+  const [purchase, setPurchase] = useState<"needs-purchase" | "lapsed" | null>(initialPurchase);
 
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turns, streaming]);
+
+  // The plans appear below the last message: bring them into view, so the prices are seen.
+  useEffect(() => {
+    if (purchase) bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [purchase]);
 
   async function send(text: string) {
     setNotice(null);
@@ -60,7 +68,7 @@ export function Conversation({ initialTurns }: ConversationProps) {
 
       if (!response.ok || !response.body) {
         const body = await response.json().catch(() => null);
-        if (body?.needsPurchase) setNeedsPurchase(true);
+        if (body?.needsPurchase) setPurchase(body.reason === "lapsed" ? "lapsed" : "needs-purchase");
         throw new Error(body?.error ?? GENERIC_ERROR);
       }
 
@@ -142,15 +150,27 @@ export function Conversation({ initialTurns }: ConversationProps) {
 
           {flagged ? <CrisisPanel /> : null}
 
-          {needsPurchase ? (
-            <p className="mt-5 rounded-xl border border-line bg-raised px-4 py-3 text-sm leading-relaxed">
-              <a href="/pricing" className="underline underline-offset-4">
-                Choose a plan to keep going
-              </a>
-            </p>
+          {purchase ? (
+            <section
+              aria-labelledby="plans-heading"
+              className="echo-rise mt-6 flex flex-col gap-4 rounded-2xl border border-line bg-raised/60 p-4 sm:p-5"
+            >
+              <div>
+                <h2 id="plans-heading" className="text-xl font-medium tracking-tight">
+                  {purchase === "lapsed" ? "Your access has ended" : "Your free conversation has ended"}
+                </h2>
+                <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">
+                  Your conversation is still here. Choose a plan to carry on where you left off. Cancel any time.
+                </p>
+              </div>
+              <PlanCards compact />
+              <p className="text-xs leading-relaxed text-ink-soft">
+                Payment is handled by Stripe. We never see or store your card details.
+              </p>
+            </section>
           ) : null}
 
-          {notice ? (
+          {notice && !purchase ? (
             <p
               role="status"
               className={`mt-5 rounded-xl border px-4 py-3 text-sm leading-relaxed ${
@@ -163,12 +183,12 @@ export function Conversation({ initialTurns }: ConversationProps) {
             </p>
           ) : null}
 
-          <div ref={bottom} className="h-px" />
+          <div ref={bottom} className="h-px scroll-mb-40" />
         </div>
       </div>
 
       <div className="sticky bottom-0 bg-page">
-        <Composer disabled={sending} onSend={send} />
+        <Composer disabled={sending || purchase !== null} onSend={send} />
         <div className="flex items-center justify-center gap-3 pb-1">
           {turns.length > 0 ? (
             <a

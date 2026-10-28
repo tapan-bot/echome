@@ -75,7 +75,7 @@ export default async function AccountPage({
             </button>
           </form>
         ) : (
-          <a href="/pricing" className="self-start rounded-lg bg-accent px-4 py-2.5 font-medium text-on-accent">
+          <a href="/pricing" className="fx-primary self-start rounded-lg bg-accent px-4 py-2.5 font-medium text-on-accent">
             Choose a plan
           </a>
         )}
@@ -121,7 +121,7 @@ export default async function AccountPage({
             <>
               {needsHub ? (
                 <form action="/api/xtiles/setup-hub" method="post">
-                  <button type="submit" className="rounded-lg bg-accent px-4 py-2.5 font-medium text-on-accent">
+                  <button type="submit" className="fx-primary rounded-lg bg-accent px-4 py-2.5 font-medium text-on-accent">
                     Set up my EchoHub
                   </button>
                 </form>

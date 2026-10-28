@@ -411,7 +411,7 @@ function Choice({
 }) {
   return (
     <label
-      className={`flex cursor-pointer gap-3 rounded-xl border px-4 py-3 transition ${
+      className={`flex cursor-pointer gap-3 rounded-xl border px-4 py-3 transition hover:-translate-y-0.5 hover:shadow-md ${
         checked ? "border-ink bg-raised" : "border-line"
       }`}
     >
@@ -581,7 +581,7 @@ function Primary({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="rounded-full bg-accent px-6 py-2.5 text-base font-medium text-on-accent transition disabled:opacity-50"
+      className="rounded-full bg-accent px-6 py-2.5 text-base font-medium text-on-accent fx-primary disabled:opacity-50"
     >
       {children}
     </button>
@@ -620,8 +620,8 @@ function Secondary({
       }
       className={
         primary
-          ? "rounded-full bg-accent px-6 py-2.5 text-base font-medium text-on-accent transition"
-          : "rounded-full border border-line px-6 py-2.5 text-base text-ink-soft transition hover:border-accent hover:text-ink"
+          ? "rounded-full bg-accent px-6 py-2.5 text-base font-medium text-on-accent fx-primary"
+          : "rounded-full border border-line px-6 py-2.5 text-base text-ink-soft fx-soft"
       }
     >
       {children}
