@@ -40,7 +40,7 @@ export default async function SettingsPage() {
         <p className="text-sm leading-relaxed text-ink-soft">
           Billing and your xTiles connection live on your account page.
         </p>
-        <a href="/account" className="self-start rounded-lg border border-line px-4 py-2.5 text-ink-soft">
+        <a href="/account" className="fx-soft self-start rounded-lg px-4 py-2.5">
           Go to account
         </a>
       </section>
@@ -48,7 +48,7 @@ export default async function SettingsPage() {
       <section className="flex flex-col gap-3 border-t border-line pt-6">
         <h2 className="text-sm font-medium">Session</h2>
         <form action={LOCAL_MODE ? localSignOut : signOut}>
-          <button type="submit" className="rounded-lg border border-line px-4 py-2.5 text-ink-soft">
+          <button type="submit" className="fx-danger rounded-lg px-4 py-2.5 font-medium">
             Sign out
           </button>
         </form>

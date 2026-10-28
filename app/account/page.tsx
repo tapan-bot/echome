@@ -77,7 +77,7 @@ export default async function AccountPage({
         </p>
         {entitlement.stripeCustomerId ? (
           <form action="/api/stripe/portal" method="post">
-            <button type="submit" className="rounded-lg border border-line px-4 py-2.5 text-ink-soft">
+            <button type="submit" className="fx-soft rounded-lg px-4 py-2.5">
               Manage billing
             </button>
           </form>
@@ -120,7 +120,7 @@ export default async function AccountPage({
         <div className="flex flex-wrap gap-2">
           {!connected ? (
             <form action="/api/xtiles/connect" method="post">
-              <button type="submit" className="rounded-lg border border-line px-4 py-2.5 text-ink-soft">
+              <button type="submit" className="fx-primary rounded-lg bg-accent px-4 py-2.5 font-medium text-on-accent">
                 Connect xTiles
               </button>
             </form>
@@ -135,14 +135,14 @@ export default async function AccountPage({
               ) : null}
               {needsHub ? (
                 <form action="/api/xtiles/check" method="post">
-                  <button type="submit" className="rounded-lg border border-line px-4 py-2.5 text-ink-soft">
+                  <button type="submit" className="fx-soft rounded-lg px-4 py-2.5">
                     Check again
                   </button>
                 </form>
               ) : null}
               {!LOCAL_MODE ? (
                 <form action="/api/xtiles/disconnect" method="post">
-                  <button type="submit" className="rounded-lg border border-line px-4 py-2.5 text-ink-soft">
+                  <button type="submit" className="fx-danger rounded-lg px-4 py-2.5">
                     Disconnect
                   </button>
                 </form>

@@ -137,9 +137,9 @@ export function ProfileMenu({
               <button
                 type="submit"
                 role="menuitem"
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-ink-soft transition hover:bg-accent-soft hover:text-ink"
+                className="flex w-full items-center gap-3 rounded-xl border border-warn bg-warn-soft px-3 py-2.5 text-left text-sm font-medium text-warn transition hover:translate-x-0.5 hover:brightness-95"
               >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-page text-ink-soft">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-warn-soft text-warn">
                   <LogoutIcon />
                 </span>
                 Sign out

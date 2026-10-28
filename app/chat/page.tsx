@@ -86,7 +86,7 @@ function StrandedChoice() {
           type="submit"
           name="choice"
           value="fresh"
-          className="rounded-full border border-line px-6 py-2.5 text-base text-ink-soft fx-soft"
+          className="rounded-full px-6 py-2.5 text-base fx-soft"
         >
           Start something new
         </button>

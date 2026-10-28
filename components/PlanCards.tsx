@@ -70,7 +70,7 @@ export function PlanCards({
             ) : (
               <a
                 href="/signup"
-                className="fx-soft rounded-full border border-line px-4 py-2.5 text-center text-ink-soft"
+                className="fx-soft rounded-full px-4 py-2.5 text-center"
               >
                 Create an account first
               </a>

@@ -44,7 +44,7 @@ function ProviderButton({ provider }: { provider: OAuthProvider }) {
     <button
       type="submit"
       disabled={pending}
-      className="flex w-full items-center justify-center gap-3 rounded-full border border-line bg-page px-5 py-3 text-base font-medium transition hover:border-accent disabled:opacity-50"
+      className="flex w-full items-center justify-center gap-3 rounded-full border-[1.5px] border-accent bg-accent-soft px-5 py-3 text-base font-medium transition hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_8px_20px_-14px_var(--color-accent)] active:translate-y-0 disabled:opacity-50"
     >
       <ProviderMark provider={provider} />
       <span>{pending ? "One moment…" : `Continue with ${label}`}</span>

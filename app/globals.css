@@ -330,15 +330,54 @@ html.has-custom-cursor * {
 }
 
 @utility fx-soft {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+  /* The same solid violet as the Chat and Choose a plan buttons. */
+  border-width: 1.5px;
+  border-color: var(--color-accent);
+  background-color: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 500;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 26px -12px color-mix(in oklch, var(--color-accent) 85%, transparent);
+    filter: brightness(1.1);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0) scale(0.97);
+    box-shadow: none;
+    filter: brightness(0.96);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &:hover:not(:disabled),
+    &:active:not(:disabled) {
+      transform: none;
+    }
+  }
+}
+
+/* For leaving or removing things (sign out): red at rest, a red wash and glow on hover. */
+@utility fx-danger {
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease,
     background-color 0.18s ease, color 0.18s ease;
+  border-width: 1.5px;
+  border-color: var(--color-warn);
+  background-color: color-mix(in oklch, var(--color-warn) 16%, var(--color-warn-soft));
+  color: color-mix(in oklch, var(--color-warn) 75%, var(--color-ink));
+  font-weight: 500;
 
   &:hover:not(:disabled) {
     transform: translateY(-1px);
-    border-color: var(--color-accent);
-    background-color: var(--color-accent-soft);
-    color: var(--color-ink);
-    box-shadow: 0 8px 20px -14px color-mix(in oklch, var(--color-accent) 80%, transparent);
+    border-color: var(--color-warn);
+    background-color: color-mix(in oklch, var(--color-warn) 30%, var(--color-warn-soft));
+    box-shadow: 0 8px 20px -14px color-mix(in oklch, var(--color-warn) 85%, transparent);
   }
 
   &:active:not(:disabled) {
@@ -346,7 +385,7 @@ html.has-custom-cursor * {
   }
 
   &:focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--color-warn);
     outline-offset: 3px;
   }
 

@@ -621,7 +621,7 @@ function Secondary({
       className={
         primary
           ? "rounded-full bg-accent px-6 py-2.5 text-base font-medium text-on-accent fx-primary"
-          : "rounded-full border border-line px-6 py-2.5 text-base text-ink-soft fx-soft"
+          : "rounded-full px-6 py-2.5 text-base fx-soft"
       }
     >
       {children}
