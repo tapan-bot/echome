@@ -2,7 +2,7 @@ import { TIERS, type Tier } from "@/lib/config/pricing";
 
 /**
  * The plans, with their prices, as cards. One place for them, so the pricing page and
- * the chat (where someone's free conversation has just ended) show exactly the same
+ * the chat (where someone's free week has just ended) show exactly the same
  * thing: the price up front, and one button to choose it.
  *
  * What is shown is display only. Stripe charges whatever its price object says, and

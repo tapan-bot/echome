@@ -2,7 +2,8 @@ import { signOut } from "@/app/(auth)/actions";
 import { localSignOut } from "@/app/(auth)/local-actions";
 import { ProfileMenu } from "@/components/ProfileMenu";
 import { currentUser } from "@/lib/auth/current-user";
-import { entitlementFor } from "@/lib/billing/entitlements";
+import { trialDaysLeft } from "@/lib/billing/access";
+import { accessFor, entitlementFor } from "@/lib/billing/entitlements";
 import { TIERS } from "@/lib/config/pricing";
 import { LOCAL_MODE } from "@/lib/local/mode";
 import { xtiles } from "@/lib/xtiles/factory";
@@ -21,11 +22,14 @@ export async function AccountMenu() {
   const user = await currentUser();
   if (!user) return null;
 
-  const [entitlement, xtilesConnected] = await Promise.all([
+  const [entitlement, access, xtilesConnected] = await Promise.all([
     entitlementFor(user.id),
+    accessFor(user.id).catch(() => null),
     (await xtiles()).isConnected(user.id).catch(() => false),
   ]);
-  const planLabel = entitlement.tier === "none" ? "Free" : TIERS[entitlement.tier].name;
+  const inFreeWeek = entitlement.tier === "none" && access?.reason === "free-trial";
+  const planLabel = entitlement.tier === "none" ? (inFreeWeek ? "Free week" : "Free") : TIERS[entitlement.tier].name;
+  const daysLeft = access ? trialDaysLeft(access, new Date()) : null;
   // Paying now: a plan that is active, or one whose card is being retried. Anything else can upgrade.
   const paying = entitlement.tier !== "none" && (entitlement.status === "active" || entitlement.status === "past_due");
 
@@ -38,6 +42,7 @@ export async function AccountMenu() {
         email={user.email}
         planLabel={planLabel}
         tier={paying ? entitlement.tier : "none"}
+        freeDaysLeft={inFreeWeek ? daysLeft : null}
         xtilesConnected={xtilesConnected}
         signOutAction={LOCAL_MODE ? localSignOut : signOut}
       />

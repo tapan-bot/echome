@@ -2,6 +2,7 @@ import "server-only";
 
 import { LOCAL_MODE } from "@/lib/local/mode";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { decideAccess, type Access } from "@/lib/billing/access";
 import type { Tier } from "@/lib/config/pricing";
 
 /**
@@ -57,47 +58,53 @@ export async function entitlementFor(userId: string): Promise<Entitlement> {
   };
 }
 
-/**
- * May this person hold a conversation?
- *
- * Three ways in: a paid entitlement, an active subscription period, or the one
- * free introductory conversation.
- */
-export interface Access {
-  readonly allowed: boolean;
-  readonly reason: "paid" | "free-intro" | "needs-purchase" | "lapsed";
-}
+export type { Access } from "@/lib/billing/access";
 
+/**
+ * May this person hold a conversation? Reads what the rule needs, then asks it
+ * (lib/billing/access.ts). Local mode has no Stripe, so everything is open.
+ */
 export async function accessFor(userId: string): Promise<Access> {
   const entitlement = await entitlementFor(userId);
 
-  if (entitlement.status === "active") return { allowed: true, reason: "paid" };
-  if (entitlement.status === "past_due") {
-    // A failed card should not lock someone out of a conversation mid-thought.
-    // Stripe retries for days; we keep them in until it gives up.
-    return { allowed: true, reason: "paid" };
-  }
-  if (entitlement.tier !== "none" && entitlement.status === "canceled") {
-    return { allowed: false, reason: "lapsed" };
+  // Paying (local mode counts everyone as paying): nothing about the free week matters.
+  if (entitlement.status === "active" || entitlement.status === "past_due") {
+    return decideAccess({ entitlement, trialStartedAt: null, now: new Date() });
   }
 
-  if (LOCAL_MODE) return { allowed: true, reason: "paid" };
-
-  const { data } = await createAdminClient()
+  const { data, error } = await createAdminClient()
     .from("profiles")
-    .select("free_intro_used")
+    .select("free_week_started_at")
     .eq("id", userId)
-    .maybeSingle<{ free_intro_used: boolean }>();
+    .maybeSingle<{ free_week_started_at: string | null }>();
 
-  return data && !data.free_intro_used
-    ? { allowed: true, reason: "free-intro" }
-    : { allowed: false, reason: "needs-purchase" };
+  // If the free week cannot be read (the column is not there yet, the database is down), a
+  // person who has not paid is let in rather than locked out: the product is the conversation,
+  // and a fault of ours must not close it. It is logged by class only.
+  if (error) {
+    console.warn(`[billing] free week unreadable — ${error.code ?? "error"}`);
+    return decideAccess({ entitlement, trialStartedAt: null, now: new Date() });
+  }
+
+  return decideAccess({
+    entitlement,
+    trialStartedAt: data?.free_week_started_at ? new Date(data.free_week_started_at) : null,
+    now: new Date(),
+  });
 }
 
-/** Called when a free introductory conversation begins. Once per account. */
-export async function consumeFreeIntro(userId: string): Promise<void> {
+/**
+ * Called on a person's first message: their free week begins. Once per account, forever: the
+ * update only touches a profile whose week has not begun, so it can never be restarted.
+ */
+export async function startFreeWeek(userId: string): Promise<void> {
   if (LOCAL_MODE) return;
-  await createAdminClient().from("profiles").update({ free_intro_used: true }).eq("id", userId);
+  const { error } = await createAdminClient()
+    .from("profiles")
+    .update({ free_week_started_at: new Date().toISOString() })
+    .eq("id", userId)
+    .is("free_week_started_at", null);
+  if (error) throw error;
 }
 
 export async function grantEntitlement(params: {

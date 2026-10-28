@@ -36,7 +36,7 @@ export function Conversation({ initialTurns, initialPurchase = null }: Conversat
   /** Set by the watchman. Sticky for the rest of the session, never dismissed
       automatically — it should not vanish while someone is reading it. */
   const [flagged, setFlagged] = useState(false);
-  /** Their free conversation has ended, or their access lapsed. The plans are shown in place of the box. */
+  /** Their free week has ended, or their access lapsed. The plans are shown in place of the box. */
   const [purchase, setPurchase] = useState<"needs-purchase" | "lapsed" | null>(initialPurchase);
 
   const bottom = useRef<HTMLDivElement>(null);
@@ -157,7 +157,7 @@ export function Conversation({ initialTurns, initialPurchase = null }: Conversat
             >
               <div>
                 <h2 id="plans-heading" className="text-xl font-medium tracking-tight">
-                  {purchase === "lapsed" ? "Your access has ended" : "Your free conversation has ended"}
+                  {purchase === "lapsed" ? "Your access has ended" : "Your free week has ended"}
                 </h2>
                 <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">
                   Your conversation is still here. Choose a plan to carry on where you left off. Cancel any time.

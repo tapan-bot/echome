@@ -15,6 +15,7 @@ export function ProfileMenu({
   email,
   planLabel,
   tier,
+  freeDaysLeft,
   xtilesConnected,
   signOutAction,
 }: {
@@ -22,6 +23,8 @@ export function ProfileMenu({
   planLabel: string;
   /** The plan they pay for now, or "none" (free, or lapsed). */
   tier: "none" | "access" | "founders";
+  /** Days left of the free week, when they are in it and it has begun. */
+  freeDaysLeft: number | null;
   xtilesConnected: boolean;
   signOutAction: () => Promise<void>;
 }) {
@@ -93,7 +96,11 @@ export function ProfileMenu({
               <UpgradeLink
                 href="/pricing"
                 title="Upgrade plan"
-                hint={`From ${TIERS.access.displayPrice}`}
+                hint={
+                  freeDaysLeft === null
+                    ? `From ${TIERS.access.displayPrice}`
+                    : `Free week: ${freeDaysLeft} ${freeDaysLeft === 1 ? "day" : "days"} left`
+                }
                 onNavigate={() => setOpen(false)}
               />
             ) : (

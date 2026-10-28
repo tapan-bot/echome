@@ -14,7 +14,7 @@ import { sessionStore } from "@/lib/echo/store-factory";
 import { appendMessages, attachMemory, resumeOrStartSession } from "@/lib/echo/sessions";
 import { classifyError, emptyMetrics, recordTurn } from "@/lib/echo/telemetry";
 import { speak } from "@/lib/echo/voice";
-import { accessFor, consumeFreeIntro } from "@/lib/billing/entitlements";
+import { accessFor, startFreeWeek } from "@/lib/billing/entitlements";
 import { recordFlag, shouldSurfaceResources, watch } from "@/lib/echo/watchman";
 import { consume } from "@/lib/rate-limit";
 import { speakLocally } from "@/lib/local/voice";
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Has this person paid, or do they still have their free conversation?
+  // Has this person paid, or are they still in their free week?
   const access = await accessFor(user.id);
   if (!access.allowed) {
     return NextResponse.json(
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
         error:
           access.reason === "lapsed"
             ? "Your access has lapsed. You can restart it from your account page."
-            : "This is where the free conversation ends. Choosing a plan keeps it going.",
+            : "Your free week has ended. Choosing a plan keeps the conversation going.",
         needsPurchase: true,
         reason: access.reason,
       },
@@ -153,8 +153,11 @@ export async function POST(request: NextRequest) {
     content: text,
   });
 
-  if (access.reason === "free-intro" && session.transcript.messages.length === 0) {
-    await consumeFreeIntro(user.id);
+  // Their first message begins the free week. Failing to record that is no reason to fail the turn.
+  if (access.reason === "free-trial" && access.trialStartedAt === null) {
+    await startFreeWeek(user.id).catch((error) =>
+      console.warn(`[billing] could not start the free week — ${classifyError(error)}`),
+    );
   }
 
   // The watchman runs alongside the turn, never in front of it. A person mid

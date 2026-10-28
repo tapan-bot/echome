@@ -18,7 +18,7 @@ export default async function PricingPage({
       <div>
         <h1 className="text-2xl font-medium tracking-tight">Keep going</h1>
         <p className="mt-2 text-ink-soft">
-          One conversation is free. After that, choose how you&rsquo;d like to continue.
+          Your first week is free. After that, choose how you&rsquo;d like to continue.
         </p>
       </div>
 

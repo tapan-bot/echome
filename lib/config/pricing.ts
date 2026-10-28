@@ -74,7 +74,14 @@ export function priceIdFor(tier: Tier): string {
 }
 
 /**
- * Whether the free introductory conversation requires an account.
+ * How long the free introduction lasts: a week from a person's first message, across as many
+ * conversations as they like. Change it here and nowhere else. (Words that say "a week" are in the
+ * pricing page, the chat's plans panel and the account page.)
+ */
+export const FREE_TRIAL_DAYS = 7;
+
+/**
+ * Whether the free introduction requires an account.
  *
  * The build brief asks: "[Confirm with the client whether this requires an
  * account.]" Requiring one is the safer default — it means the free session is

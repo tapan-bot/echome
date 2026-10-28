@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 
 import { PoweredBy } from "@/components/PoweredBy";
 import { currentUser } from "@/lib/auth/current-user";
-import { entitlementFor } from "@/lib/billing/entitlements";
+import { trialDaysLeft } from "@/lib/billing/access";
+import { accessFor, entitlementFor } from "@/lib/billing/entitlements";
 import { TIERS } from "@/lib/config/pricing";
 import { LOCAL_MODE } from "@/lib/local/mode";
 import { xtiles } from "@/lib/xtiles/factory";
@@ -34,6 +35,8 @@ export default async function AccountPage({
   if (!user) redirect("/login?next=/account");
 
   const entitlement = await entitlementFor(user.id);
+  const access = await accessFor(user.id).catch(() => null);
+  const daysLeft = access ? trialDaysLeft(access, new Date()) : null;
   const adapter = await xtiles();
   const connected = await adapter.isConnected(user.id).catch(() => false);
   // Is there an EchoHub to write to? Asked here so a member who is already
@@ -64,7 +67,11 @@ export default async function AccountPage({
         <h2 className="text-sm font-medium">Plan</h2>
         <p className="text-ink-soft">
           {entitlement.tier === "none"
-            ? "No plan yet — you have one free conversation."
+            ? access?.reason === "free-trial" && access.trialStartedAt
+              ? `No plan yet — your free week has ${daysLeft} ${daysLeft === 1 ? "day" : "days"} left.`
+              : access?.reason === "needs-purchase"
+                ? "No plan yet — your free week has ended."
+                : "No plan yet — your free week begins with your first message."
             : `${TIERS[entitlement.tier].name} · ${entitlement.status}`}
           {LOCAL_MODE ? " (local mode unlocks everything)" : null}
         </p>

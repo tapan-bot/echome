@@ -38,7 +38,7 @@ export default async function ChatPage() {
     throw error;
   }
 
-  // No access right now (the free conversation is used, or a plan lapsed): the plans are shown
+  // No access right now (the free week is over, or a plan lapsed): the plans are shown
   // straight away. A failure to check must never lock someone out, so any doubt means "carry on".
   const purchase = await accessFor(user.id)
     .then((access) =>
