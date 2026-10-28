@@ -5,7 +5,6 @@ import { useState } from "react";
 
 import { AuthOrbs } from "@/components/auth/AuthOrbs";
 import { EchoDots } from "@/components/EchoLoader";
-import { EchoMark } from "@/components/EchoMark";
 import { passwordStrength } from "@/lib/auth/password-strength";
 
 /** Shared form pieces, so the sign-in panel and the other auth pages match. */
@@ -213,12 +212,6 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
             "0 1px 2px rgba(0,0,0,0.04), 0 18px 40px -20px rgba(0,0,0,0.25)",
         }}
       >
-        <div className="mb-5 flex justify-center">
-          <span className="flex items-center gap-2 rounded-full border border-line bg-page px-3 py-1.5">
-            <EchoMark size={20} />
-            <span className="text-sm font-medium">EchoMe</span>
-          </span>
-        </div>
         {children}
       </div>
     </main>

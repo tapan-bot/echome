@@ -4,6 +4,7 @@ import { AccountMenu } from "@/components/AccountMenu";
 import { ChatButton } from "@/components/ChatButton";
 import { CursorGlow } from "@/components/CursorGlow";
 import { CustomCursor } from "@/components/CustomCursor";
+import { SiteBrand } from "@/components/SiteBrand";
 import { LocalModeBanner } from "@/components/local/LocalModeBanner";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LOCAL_MODE } from "@/lib/local/mode";
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <CustomCursor />
         <CursorGlow />
         <ThemeToggle />
+        <SiteBrand />
         <AccountMenu />
         <ChatButton />
         {LOCAL_MODE ? <LocalModeBanner /> : null}

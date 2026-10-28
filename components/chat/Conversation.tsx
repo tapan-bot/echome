@@ -193,7 +193,7 @@ export function Conversation({ initialTurns, initialPurchase = null }: Conversat
           {turns.length > 0 ? (
             <a
               href="/close"
-              className="text-xs text-ink-soft underline underline-offset-4 hover:text-ink"
+              className="rounded-full border border-accent/40 bg-accent-soft/40 px-4 py-1.5 text-sm text-ink-soft transition hover:border-accent hover:bg-accent-soft hover:text-ink"
             >
               Finish this conversation
             </a>

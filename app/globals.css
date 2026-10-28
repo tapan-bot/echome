@@ -448,6 +448,28 @@ html.has-custom-cursor * {
   }
 }
 
+/* The logo and name in the top corner: a light lift and a violet edge on hover. */
+@utility fx-brand {
+  transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    border-color: var(--color-accent);
+    background-color: var(--color-accent-soft);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &:hover {
+      transform: none;
+    }
+  }
+}
+
 @utility fx-card {
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 
