@@ -43,7 +43,7 @@ export default async function WelcomePage({
       <div className="mt-7 flex flex-col gap-3">
         <a
           href="/chat"
-          className="echo-rise group flex items-center gap-3.5 rounded-2xl border border-line bg-page px-4 py-3.5 transition hover:-translate-y-0.5 hover:border-accent hover:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.25)]"
+          className="echo-rise group flex items-center gap-3.5 fx-calm rounded-2xl px-4 py-3.5"
         >
           <IconBadge tone="accent">
             <ChatIcon />
@@ -60,7 +60,7 @@ export default async function WelcomePage({
         {connected ? (
           <a
             href="/account"
-            className="echo-rise group flex items-center gap-3.5 rounded-2xl border border-line bg-page px-4 py-3.5 transition hover:-translate-y-0.5 hover:border-accent hover:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.25)]"
+            className="echo-rise group flex items-center gap-3.5 fx-calm rounded-2xl px-4 py-3.5"
             style={{ animationDelay: "70ms" }}
           >
             <IconBadge tone="success">
@@ -74,11 +74,9 @@ export default async function WelcomePage({
           </a>
         ) : (
           <form action="/api/xtiles/connect" method="post">
-            {/* Dashed border, same as the temp Google/Facebook buttons — this
-                isn't wired up to a real endpoint yet either. */}
             <button
               type="submit"
-              className="echo-rise group flex w-full items-center gap-3.5 rounded-2xl border border-dashed border-line bg-page px-4 py-3.5 text-left transition hover:-translate-y-0.5 hover:border-accent hover:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.25)]"
+              className="echo-rise group flex w-full items-center gap-3.5 fx-calm rounded-2xl px-4 py-3.5 text-left"
               style={{ animationDelay: "70ms" }}
             >
               <IconBadge tone="accent">
@@ -104,7 +102,7 @@ export default async function WelcomePage({
 
 function IconBadge({ tone, children }: { tone: "accent" | "success"; children: React.ReactNode }) {
   const toneClass =
-    tone === "success" ? "bg-success-soft text-success" : "bg-accent-soft text-accent";
+    tone === "success" ? "bg-success/25 text-ink" : "bg-accent/30 text-ink";
   return (
     <span
       className={`flex size-11 shrink-0 items-center justify-center rounded-xl transition group-hover:scale-105 ${toneClass}`}

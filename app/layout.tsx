@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 
 import { AccountMenu } from "@/components/AccountMenu";
 import { ChatButton } from "@/components/ChatButton";
+import { CursorGlow } from "@/components/CursorGlow";
 import { CustomCursor } from "@/components/CustomCursor";
 import { LocalModeBanner } from "@/components/local/LocalModeBanner";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -40,6 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-dvh antialiased">
         <CustomCursor />
+        <CursorGlow />
         <ThemeToggle />
         <AccountMenu />
         <ChatButton />
