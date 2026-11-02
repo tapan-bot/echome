@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isPlausibleTidy, joinDictation } from "@/lib/echo/dictation";
+import { isPlausibleTidy, joinDictation, mergeSpeech } from "@/lib/echo/dictation";
 
 describe("joining spoken words onto what is already in the box", () => {
   it("starts a new message with a capital", () => {
@@ -69,5 +69,86 @@ describe("is this a tidy-up of the same words?", () => {
   it("refuses an empty result", () => {
     expect(isPlausibleTidy(spoken, "")).toBe(false);
     expect(isPlausibleTidy("", "anything")).toBe(false);
+  });
+});
+
+describe("merging what the browser's speech recognition returns", () => {
+  it("says a phrase once when the browser sends it again and again, a little longer each time", () => {
+    // Chrome on Android sends growing copies, each marked final.
+    expect(mergeSpeech(["the", "the weather", "the weather is", "the weather is lovely"])).toBe(
+      "the weather is lovely",
+    );
+    expect(mergeSpeech(["The weather is", " The weather is lovely today"])).toBe("The weather is lovely today");
+  });
+
+  it("leaves separate phrases as they are, in order", () => {
+    expect(mergeSpeech(["It was a long day", " and then it rained"])).toBe("It was a long day and then it rained");
+    expect(mergeSpeech(["Hello there.", " How are you?"])).toBe("Hello there. How are you?");
+  });
+
+  it("does not mind a changed capital or punctuation between copies", () => {
+    expect(mergeSpeech(["the weather", "The weather is, lovely"])).toBe("The weather is, lovely");
+  });
+
+  it("adds only what is new when a part picks up partway through the last words", () => {
+    expect(mergeSpeech(["we went to the park", "to the park and then home"])).toBe(
+      "we went to the park and then home",
+    );
+  });
+
+  it("ignores a longer phrase repeated as a copy of what is already there", () => {
+    expect(mergeSpeech(["the weather is lovely", "the weather is lovely"])).toBe("the weather is lovely");
+    expect(mergeSpeech(["the weather is lovely today", "the weather is lovely"])).toBe(
+      "the weather is lovely today",
+    );
+  });
+
+  it("does not swallow a word that was really said twice", () => {
+    expect(mergeSpeech(["I said no", "no"])).toBe("I said no no");
+  });
+
+  it("keeps a single word that is said again after a pause", () => {
+    expect(mergeSpeech(["yes", " yes"])).toBe("yes yes");
+    expect(mergeSpeech(["no", " no", " no"])).toBe("no no no");
+  });
+
+  it("never adds, drops or reorders a word, whatever the browser's pattern (randomised)", () => {
+    // A small seeded generator, so a failure can be reproduced.
+    let seed = 20261102;
+    const random = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296);
+    const vocabulary = Array.from({ length: 60 }, (_, i) => `w${i.toString(36)}x`);
+
+    for (let round = 0; round < 400; round += 1) {
+      const count = 2 + Math.floor(random() * 25);
+      const words = Array.from({ length: count }, () => vocabulary[Math.floor(random() * vocabulary.length)]!);
+      // Keep the sentence free of accidental repeats, so a repeat in the output can only be a bug.
+      const sentence = [...new Set(words)];
+      const want = sentence.join(" ");
+
+      // Chrome on Android: each result is a longer copy of the same sentence.
+      const growing: string[] = [];
+      for (let end = 1; end <= sentence.length; end += 1 + Math.floor(random() * 3)) {
+        growing.push(sentence.slice(0, end).join(" "));
+      }
+      growing.push(want);
+      expect(mergeSpeech(growing)).toBe(want);
+
+      // The same, with the browser sending the last copy again and with odd spacing.
+      expect(mergeSpeech([...growing, ` ${want}`, want])).toBe(want);
+
+      // Most browsers: the sentence in separate phrases, each once.
+      const phrases: string[] = [];
+      for (let at = 0; at < sentence.length; ) {
+        const take = 1 + Math.floor(random() * 5);
+        phrases.push(sentence.slice(at, at + take).join(" "));
+        at += take;
+      }
+      expect(mergeSpeech(phrases)).toBe(want);
+    }
+  });
+
+  it("handles nothing at all", () => {
+    expect(mergeSpeech([])).toBe("");
+    expect(mergeSpeech(["", "  "])).toBe("");
   });
 });

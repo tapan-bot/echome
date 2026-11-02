@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { joinDictation } from "@/lib/echo/dictation";
+import { joinDictation, mergeSpeech } from "@/lib/echo/dictation";
 
 /**
  * Speech to text, using the browser's own speech recognition.
@@ -291,15 +291,25 @@ export function useSpeechInput(getTextarea: () => HTMLTextAreaElement | null) {
 
     recognition.onresult = (event) => {
       // Rebuilt from the full list each time, so words firm up in place as the
-      // browser revises its guess instead of piling up as duplicates.
-      let settled = "";
-      let unsettled = "";
+      // browser revises its guess instead of piling up as duplicates. Some browsers
+      // (Chrome on Android) send each partial phrase as a growing copy marked final,
+      // so the copies are merged into one (mergeSpeech) instead of being joined end to end.
+      const finals: string[] = [];
+      const interims: string[] = [];
+      const everything: string[] = [];
       for (let i = 0; i < event.results.length; i += 1) {
         const result = event.results[i];
         const text = result?.[0]?.transcript ?? "";
-        if (result?.isFinal) settled += text;
-        else unsettled += text;
+        everything.push(text);
+        (result?.isFinal ? finals : interims).push(text);
       }
+      const settled = mergeSpeech(finals);
+      const whole = mergeSpeech(everything);
+      // What is left after the settled words. Normally the whole text begins with them; if the
+      // browser's guess changed so that it no longer does, fall back to the interim words alone.
+      const unsettled = whole.startsWith(settled)
+        ? whole.slice(settled.length)
+        : ` ${mergeSpeech(interims)}`;
       finalText = settled;
       interimText = unsettled;
 

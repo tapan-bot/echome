@@ -43,6 +43,56 @@ function continued(text: string): string {
 }
 
 /**
+ * The words the browser's speech recognition returned, as one piece of text, without repeats.
+ *
+ * Some browsers (Chrome on Android in particular) do not return one result per phrase. They
+ * return a growing copy of the same phrase each time ("kind", "kind of", "kind of this"), each
+ * marked final, so joining them end to end says the phrase several times over. This keeps the
+ * newest, fullest copy instead:
+ *  - a part that continues the text so far replaces it (it is the same words, with more);
+ *  - a part that is already contained at the end, or is the start of what we have, adds nothing;
+ *  - a part that picks up in the middle of the last words (two or more in common) adds only
+ *    what is new;
+ *  - anything else is a new phrase and is added after.
+ * Words are compared without case or punctuation, so a changed capital does not look new.
+ * Where each result is its own phrase, as in most browsers, the text comes out unchanged.
+ */
+export function mergeSpeech(parts: readonly string[]): string {
+  const key = (word: string) => word.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const same = (a: string[], b: string[], from: number) =>
+    b.every((word, i) => key(a[from + i] ?? "") === key(word));
+
+  let text: string[] = [];
+  for (const part of parts) {
+    const next = part.split(/\s+/).filter((word) => word.length > 0);
+    if (next.length === 0) continue;
+    if (text.length === 0) {
+      text = next;
+      continue;
+    }
+    // The newest copy of the same words, with more after them: keep it. (One word said again,
+    // with nothing added, is not a copy: "yes ... yes" stays two words.)
+    if ((next.length > text.length || text.length >= 2) && next.length >= text.length && same(next, text, 0)) {
+      text = next;
+      continue;
+    }
+    // Already there: at the end, or as the start of what we have. (A single word is not judged
+    // this way: saying "no" twice is not a repeat.)
+    if (next.length >= 2 && next.length <= text.length && (same(text, next, text.length - next.length) || same(text, next, 0))) continue;
+    // Picks up partway through the last words: add only what is new.
+    let overlap = 0;
+    for (let k = Math.min(text.length, next.length) - 1; k >= 2; k -= 1) {
+      if (same(text, next.slice(0, k), text.length - k)) {
+        overlap = k;
+        break;
+      }
+    }
+    text = [...text, ...next.slice(overlap)];
+  }
+  return text.join(" ");
+}
+
+/**
  * `existing` followed by `spoken`, joined so it reads as one piece of writing:
  * one space between (or the line break that was there), capital letter after a
  * finished sentence, lower case when carrying on from an unfinished one.
