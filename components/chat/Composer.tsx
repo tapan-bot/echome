@@ -153,7 +153,7 @@ export function Composer({ disabled, onSend }: ComposerProps) {
               <span role={tidy === "failed" ? "alert" : undefined}>
                 {tidy === "failed"
                   ? "Couldn't tidy that just now. Your words are as you said them."
-                  : "Sends these words to Claude to fix mishearings. EchoMe doesn't keep them."}
+                  : "Sends these words to the AI to fix mishearings. EchoMe doesn't keep them."}
               </span>
             </>
           )}
