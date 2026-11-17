@@ -15,7 +15,7 @@ import {
 import { destroySession, readTranscript } from "@/lib/echo/sessions";
 import { classifyError, recordTurn } from "@/lib/echo/telemetry";
 import type { SessionStore } from "@/lib/echo/store";
-import { XTilesWriteError, type XTilesAdapter } from "@/lib/xtiles/adapter";
+import { XTilesNotConnectedError, XTilesWriteError, type XTilesAdapter } from "@/lib/xtiles/adapter";
 
 /**
  * The closing ritual: how a conversation ends.
@@ -186,6 +186,16 @@ export async function commitClosing(
       console.warn(`[ritual] xTiles write failed — ${failure}`);
       await markFailed(receiptId, failure);
       // THE SESSION IS NOT DESTROYED. This is the whole recovery path.
+      if (error instanceof XTilesNotConnectedError) {
+        // The saved link to xTiles stopped working (its sign-in expired or was revoked). The
+        // screen offers to connect again; trying the same thing again would only fail the same way.
+        throw new RitualError(
+          "Your xTiles connection has expired, so I haven't ended the conversation. " +
+            "Connect xTiles again below, then try again. Your conversation is exactly where you left it.",
+          "not-connected",
+          true,
+        );
+      }
       const hubMissing = error instanceof XTilesWriteError && error.hubMissing;
       const hubRejected = error instanceof XTilesWriteError && error.hubRejected;
       if (hubRejected) {

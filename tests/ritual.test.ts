@@ -6,7 +6,7 @@ import { InMemorySessionStore } from "@/lib/echo/store";
 import { commitClosing, proposeClosing, abandonClosing, RitualError } from "@/lib/echo/ritual";
 import { buildMapPage, keepOnly, parseDistillation, type Distillation } from "@/lib/echo/schema";
 import { FakeXTiles } from "@/lib/xtiles/fake";
-import { XTilesWriteError } from "@/lib/xtiles/adapter";
+import { XTilesNotConnectedError, XTilesWriteError } from "@/lib/xtiles/adapter";
 
 /**
  * The closing ritual, with the recovery path as the centrepiece.
@@ -240,6 +240,23 @@ describe("when the xTiles write fails", () => {
     // The chat is still there, and still readable by its own key.
     expect(store.peek(id)).toBeDefined();
     expect(await store.find(id, USER)).not.toBeNull();
+  });
+
+  it("asks them to connect xTiles again when its saved sign-in has stopped working", async () => {
+    const store = new InMemorySessionStore();
+    const expired = new FakeXTiles();
+    vi.spyOn(expired, "write").mockRejectedValue(new XTilesNotConnectedError());
+
+    const id = await conversation(store);
+    const proposal = await proposeClosing(store, USER);
+
+    const error = (await commitClosing(store, expired, USER, id, ["entry-theme"], proposal.distillation).catch(
+      (e: RitualError) => e,
+    )) as RitualError;
+
+    expect(error.kind).toBe("not-connected");
+    expect(error.message).toMatch(/connect xTiles again/i);
+    expect(store.peek(id)).toBeDefined();
   });
 });
 
