@@ -73,6 +73,24 @@ export function hubMarkdown(): string {
   return [`# ${HUB_PROJECT_TITLE}`, compassMarkdown(), mapMarkdown()].join("\n\n");
 }
 
+/**
+ * The next EchoHub, made when a page is turned: the same two pages, with the Turn the Page tile
+ * already on the EchoMap so the trail carries on from it. If the person had answered their
+ * EchoCompass, their own words are carried over under the new questions, unchanged, so the new
+ * page begins where they were and they are free to rewrite it ("who are you now?").
+ */
+export function nextHubMarkdown(options: {
+  readonly title: string;
+  readonly turnPageMarkdown: string;
+  readonly previousCompass: string | null;
+}): string {
+  const carried = (options.previousCompass ?? "").trim();
+  const compass = carried.length > 0
+    ? [compassMarkdown(), "### Carried over from your previous EchoCompass", carried].join("\n\n")
+    : compassMarkdown();
+  return [`# ${options.title}`, compass, mapMarkdown(), options.turnPageMarkdown].join("\n\n");
+}
+
 // ---------------------------------------------------------------------------
 // Taking the template's own words back out.
 //

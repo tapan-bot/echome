@@ -7,6 +7,8 @@ import type { MapPage } from "@/lib/echo/schema";
 import { formatMemory } from "@/lib/xtiles/hub";
 import {
   XTilesWriteError,
+  type NextPage,
+  type Trail,
   type WriteResult,
   type XTilesAdapter,
   type XTilesIdentity,
@@ -28,6 +30,8 @@ interface Workspace {
   displayName: string;
   /** The EchoMap, oldest first. There is no Compass: only the person writes that. */
   map: MapPage[];
+  /** EchoMaps from before each page was turned, oldest first. Kept, never deleted. */
+  archive?: MapPage[][];
   /** idempotencyKey -> ref, so a retry returns the original result. */
   writes: Record<string, { ref: string; writtenAt: string }>;
 }
@@ -105,6 +109,32 @@ export class FakeXTiles implements XTilesAdapter {
   async readMemory(userId: string): Promise<string | null> {
     const pages = this.workspaceFor(this.load(), userId).map;
     return formatMemory(null, pages.map((page) => page.markdown).join("\n\n"));
+  }
+
+  async readTrail(userId: string): Promise<Trail> {
+    return { entries: this.workspaceFor(this.load(), userId).map, compass: null };
+  }
+
+  /** The earlier EchoMap is kept (under `archive`), and a new one begins with the tile. */
+  async startNextPage(userId: string, next: NextPage): Promise<WriteResult> {
+    if (this.failNextWrite) {
+      const { reason, retryable, hubMissing, hubRejected } = this.failNextWrite;
+      this.failNextWrite = null;
+      throw new XTilesWriteError(reason, retryable, hubMissing ?? false, hubRejected ?? false);
+    }
+    const all = this.load();
+    const workspace = this.workspaceFor(all, userId);
+    const result = {
+      ref: `${workspace.workspaceId}/${next.title}`,
+      writtenAt: new Date().toISOString(),
+    };
+    all[userId] = {
+      ...workspace,
+      map: [next.turnPage],
+      archive: [...(workspace.archive ?? []), workspace.map],
+    };
+    this.save(all);
+    return result;
   }
 
   async checkWorkspace(): Promise<"ready" | "no-hub"> {

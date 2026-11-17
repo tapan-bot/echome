@@ -27,6 +27,21 @@ export interface WriteResult {
   readonly writtenAt: string;
 }
 
+export interface Trail {
+  readonly entries: readonly MapPage[];
+  /** The EchoCompass text as it is in xTiles (template words included), or null. */
+  readonly compass: string | null;
+}
+
+export interface NextPage {
+  /** The new EchoHub's name. */
+  readonly title: string;
+  /** The Turn the Page tile, which the new EchoMap begins with. */
+  readonly turnPage: MapPage;
+  /** The person's own EchoCompass answers to carry over (template words already removed), or null. */
+  readonly previousCompass: string | null;
+}
+
 export interface XTilesAdapter {
   /** Whether this user has a usable connection right now. */
   isConnected(userId: string): Promise<boolean>;
@@ -58,6 +73,19 @@ export interface XTilesAdapter {
    * from the template. A no-op, answering "exists", if they already have one.
    */
   createHub(userId: string, options?: { replace?: boolean }): Promise<"created" | "exists">;
+
+  /**
+   * The current EchoHub as it stands, for turning the page: every tile on the EchoMap
+   * (oldest first) and the EchoCompass text. Read only.
+   */
+  readTrail(userId: string): Promise<Trail>;
+
+  /**
+   * Turn the page: make the next EchoHub beside the current one, holding the Turn the Page tile,
+   * and make it the one conversations are saved to from now on. The old EchoHub is left exactly
+   * as it is. Throws XTilesWriteError if it could not be done, and then nothing has changed.
+   */
+  startNextPage(userId: string, next: NextPage): Promise<WriteResult>;
 
   /**
    * Add one dated entry to the person's EchoMap, as a page (never a task).

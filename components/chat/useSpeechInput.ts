@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { joinDictation, mergeSpeech } from "@/lib/echo/dictation";
+import { QUIET_SECONDS_DEEP, joinDictation, mergeSpeech } from "@/lib/echo/dictation";
 
 /**
  * Speech to text, using the browser's own speech recognition.
@@ -14,8 +14,9 @@ import { joinDictation, mergeSpeech } from "@/lib/echo/dictation";
  * up); when listening stops they are written into the message box, where the
  * person reads them, edits them, and chooses to send.
  *
- * Listening stops by itself after a few seconds of quiet, or when the person
- * taps the microphone again. Either way the box is filled in at once, and any
+ * Listening stops by itself after a pause (`quietSeconds`: short at the start of a
+ * conversation, longer once it is deep, so there is room to think), or when the person
+ * taps the microphone again. They have a few seconds to begin speaking first. Either way the box is filled in at once, and any
  * last words the browser delivers a moment later are added if it hasn't been
  * edited in the meantime.
  *
@@ -30,9 +31,8 @@ import { joinDictation, mergeSpeech } from "@/lib/echo/dictation";
  * mapped from the browser's error CODE only.
  */
 
-/** How long it can be quiet before listening stops by itself. */
-export const SILENCE_STOP_SECONDS = 5;
-const SILENCE_STOP_MS = SILENCE_STOP_SECONDS * 1000;
+/** How long someone has to begin speaking after tapping the microphone, before it gives up. */
+const FIRST_WORDS_MS = QUIET_SECONDS_DEEP * 1000;
 
 // The DOM typings in TypeScript do not include the recognition classes (they
 // are still vendor-prefixed in Chrome and Safari), so the small part we use is
@@ -121,7 +121,10 @@ export interface LiveSpeech {
   readonly interim: string;
 }
 
-export function useSpeechInput(getTextarea: () => HTMLTextAreaElement | null) {
+export function useSpeechInput(getTextarea: () => HTMLTextAreaElement | null, quietSeconds: number) {
+  /** The pause that ends listening, read when each timer is armed so a change applies at once. */
+  const quiet = useRef(quietSeconds);
+  quiet.current = quietSeconds;
   // False on the server and on first paint, so the button only appears once we
   // know this browser can do it. Firefox, for one, cannot.
   const [supported, setSupported] = useState(false);
@@ -284,9 +287,9 @@ export function useSpeechInput(getTextarea: () => HTMLTextAreaElement | null) {
       }
     };
 
-    const armSilenceTimer = () => {
+    const armSilenceTimer = (ms: number) => {
       clearSilenceTimer();
-      silenceTimer.current = setTimeout(finish, SILENCE_STOP_MS);
+      silenceTimer.current = setTimeout(finish, ms);
     };
 
     recognition.onresult = (event) => {
@@ -323,7 +326,7 @@ export function useSpeechInput(getTextarea: () => HTMLTextAreaElement | null) {
         final: settled.trimStart(),
         interim: settled.length === 0 ? unsettled.trimStart() : unsettled,
       });
-      armSilenceTimer();
+      armSilenceTimer(quiet.current * 1000);
     };
     recognition.onerror = (event) => setError(messageFor(event.error));
     recognition.onend = () => {
@@ -339,7 +342,7 @@ export function useSpeechInput(getTextarea: () => HTMLTextAreaElement | null) {
     finisher.current = finish;
     setListening(true);
     setLive({ before, final: "", interim: "" });
-    armSilenceTimer();
+    armSilenceTimer(FIRST_WORDS_MS);
     try {
       recognition.start();
     } catch {

@@ -248,6 +248,11 @@ export function pickHub(projects: readonly Project[]): Project | null {
   return bestByName(projects, (project) => project.name, HUB_NAME, false);
 }
 
+/** The project named exactly `name` (ignoring case, emoji and punctuation), or null. */
+export function pickProjectNamed(projects: readonly Project[], name: string): Project | null {
+  return bestByName(projects, (project) => project.name, name, false);
+}
+
 /** Whether the project list says there is more of it to fetch, and where from. */
 export function listCursor(text: string): string | null {
   const json = tryJson(text);

@@ -12,6 +12,7 @@ import {
   parseProjects,
   listCursor,
   pickHub,
+  pickProjectNamed,
   TOOL_ADD_TILES,
   TOOL_CREATE_PROJECT,
   TOOL_GET_PROJECT,
@@ -22,12 +23,14 @@ import {
   type Project,
 } from "@/lib/xtiles/hub";
 import { McpError, McpSession } from "@/lib/xtiles/mcp";
-import { COMPASS_PAGE_TITLE, MAP_PAGE_TITLE, hubMarkdown } from "@/lib/xtiles/template";
+import { COMPASS_PAGE_TITLE, MAP_PAGE_TITLE, hubMarkdown, nextHubMarkdown } from "@/lib/xtiles/template";
 import { refreshTokens, XTilesAuthError } from "@/lib/xtiles/oauth";
 import { readTokens, saveTokens, type XTilesTokens } from "@/lib/xtiles/tokens";
 import {
   XTilesNotConnectedError,
   XTilesWriteError,
+  type NextPage,
+  type Trail,
   type WriteResult,
   type XTilesAdapter,
   type XTilesIdentity,
@@ -126,6 +129,91 @@ export class XTilesHttpAdapter implements XTilesAdapter {
   async readExisting(userId: string): Promise<readonly MapPage[]> {
     const hub = await this.withSession(userId, (session, tokens) => this.loadHub(session, tokens, userId));
     return parseEntries(hub.map?.text ?? "");
+  }
+
+  async readTrail(userId: string): Promise<Trail> {
+    const hub = await this.withSession(userId, (session, tokens) => this.loadHub(session, tokens, userId));
+    return { entries: parseEntries(hub.map?.text ?? ""), compass: hub.compass?.text ?? null };
+  }
+
+  /**
+   * Turn the page: make the next EchoHub beside the current one and move to it. The old one is
+   * not touched. Two presses at once make one project, and a retry after a project was made but
+   * not yet remembered adopts it instead of making another.
+   */
+  async startNextPage(userId: string, next: NextPage): Promise<WriteResult> {
+    const running = XTilesHttpAdapter.turning.get(userId);
+    if (running) return running;
+    const work = this.makeNextPage(userId, next).finally(() => XTilesHttpAdapter.turning.delete(userId));
+    XTilesHttpAdapter.turning.set(userId, work);
+    return work;
+  }
+
+  private static readonly turning = new Map<string, Promise<WriteResult>>();
+
+  private async makeNextPage(userId: string, next: NextPage): Promise<WriteResult> {
+    try {
+      return await this.withSession(userId, async (session, tokens) => {
+        const tools = await session.requireTools([TOOL_CREATE_PROJECT, TOOL_LIST_PROJECTS]);
+        const { projects: before } = await this.listAllProjects(session, tools).catch(() => ({
+          projects: [] as Project[],
+        }));
+
+        let projectId = pickProjectNamed(before, next.title)?.id ?? null;
+        if (!projectId) {
+          let failure: unknown = null;
+          try {
+            const reply = await session.callTool(
+              TOOL_CREATE_PROJECT,
+              buildArguments(tools.get(TOOL_CREATE_PROJECT)!, {
+                markdown: nextHubMarkdown({
+                  title: next.title,
+                  turnPageMarkdown: next.turnPage.markdown,
+                  previousCompass: next.previousCompass,
+                }),
+              }),
+            );
+            projectId = parseCreated(reply).projectId;
+          } catch (error) {
+            failure = error;
+          }
+          if (!projectId) {
+            // xTiles may have made it all the same: look, rather than risk making a second.
+            projectId = await this.findNewProject(session, tools, new Set(before.map((p) => p.id)), next.title);
+          }
+          if (!projectId) {
+            if (failure) throw failure;
+            throw new McpError("protocol", false, "The next EchoHub was created, but its id could not be read.");
+          }
+        }
+
+        // From here on this is the EchoHub conversations are read from and saved to.
+        await saveTokens(userId, { ...tokens, projectId, projectMadeAt: Date.now() });
+        return { ref: projectId, writtenAt: new Date().toISOString() };
+      });
+    } catch (error) {
+      throw toWriteError(error);
+    }
+  }
+
+  /** A project called `title` that was not there before: a few looks, since a new one can be slow to list. */
+  private async findNewProject(
+    session: McpSession,
+    listTools: Awaited<ReturnType<McpSession["requireTools"]>>,
+    knownBefore: ReadonlySet<string>,
+    title: string,
+  ): Promise<string | null> {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1200));
+      try {
+        const { projects } = await this.listAllProjects(session, listTools);
+        const found = pickProjectNamed(projects.filter((project) => !knownBefore.has(project.id)), title);
+        if (found) return found.id;
+      } catch {
+        // Try again; nothing is lost by looking twice.
+      }
+    }
+    return null;
   }
 
   async write(userId: string, page: MapPage, _idempotencyKey: string): Promise<WriteResult> {

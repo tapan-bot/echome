@@ -2,19 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 
-import { SILENCE_STOP_SECONDS, useSpeechInput } from "@/components/chat/useSpeechInput";
+import { useSpeechInput } from "@/components/chat/useSpeechInput";
 import { VoiceEqualizer } from "@/components/chat/VoiceEqualizer";
-import { joinDictation } from "@/lib/echo/dictation";
+import { joinDictation, quietSecondsFor } from "@/lib/echo/dictation";
 
 interface ComposerProps {
   readonly disabled: boolean;
+  /** How many messages the person has sent so far: a longer pause is allowed once the conversation is deep. */
+  readonly messagesSent: number;
   readonly onSend: (text: string) => void;
 }
 
-export function Composer({ disabled, onSend }: ComposerProps) {
+export function Composer({ disabled, messagesSent, onSend }: ComposerProps) {
   const textarea = useRef<HTMLTextAreaElement>(null);
   const getTextarea = useCallback(() => textarea.current, []);
-  const speech = useSpeechInput(getTextarea);
+  const quietSeconds = quietSecondsFor(messagesSent);
+  const speech = useSpeechInput(getTextarea, quietSeconds);
 
   // When dictation ends the text box comes back, so put the cursor in it. Not on
   // a phone, where focusing would raise the keyboard over what was just said.
@@ -119,7 +122,7 @@ export function Composer({ disabled, onSend }: ComposerProps) {
     >
       {speech.listening ? (
         <p role="status" className="text-xs leading-relaxed text-ink-soft">
-          Listening… it stops by itself after {SILENCE_STOP_SECONDS} seconds of quiet, or tap the
+          Listening… it stops by itself after {quietSeconds} seconds of quiet, or tap the
           microphone. Your browser&rsquo;s own speech service turns your voice into words, and only
           the words come to EchoMe.
         </p>

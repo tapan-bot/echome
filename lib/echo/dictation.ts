@@ -13,6 +13,18 @@
  * ordinary small word).
  */
 
+/** How long a pause ends dictation at the start of a conversation: people speak in short bursts. */
+export const QUIET_SECONDS_AT_START = 2;
+/** How long it lasts once the conversation is deep: people stop to think, so the pause is longer. */
+export const QUIET_SECONDS_DEEP = 5;
+/** How many messages the person has sent before the conversation counts as deep. */
+const DEEP_AFTER_MESSAGES = 3;
+
+/** The pause, in seconds, that should end dictation, given how many messages the person has sent. */
+export function quietSecondsFor(messagesSent: number): number {
+  return messagesSent >= DEEP_AFTER_MESSAGES ? QUIET_SECONDS_DEEP : QUIET_SECONDS_AT_START;
+}
+
 /** Words that begin a continuing phrase and are never names. Lower-cased when joined mid-sentence. */
 const ORDINARY_STARTERS = new Set([
   "a", "an", "the", "and", "but", "or", "so", "because", "if", "when", "while", "as", "that",

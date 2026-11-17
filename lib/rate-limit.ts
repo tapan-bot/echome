@@ -34,6 +34,8 @@ export const LIMITS = {
   tidy: { max: 20, windowSeconds: 60 },
   /** Setting up the EchoHub: a button press, not something to repeat in a loop. */
   hub: { max: 10, windowSeconds: 60 },
+  /** Turning the page reads a whole EchoMap and may make a model call: a rare, deliberate act. */
+  turn: { max: 8, windowSeconds: 300 },
 } as const satisfies Record<string, Limit>;
 
 export type LimitName = keyof typeof LIMITS;

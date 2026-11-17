@@ -1,6 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import { isPlausibleTidy, joinDictation, mergeSpeech } from "@/lib/echo/dictation";
+import {
+  QUIET_SECONDS_AT_START,
+  QUIET_SECONDS_DEEP,
+  isPlausibleTidy,
+  joinDictation,
+  mergeSpeech,
+  quietSecondsFor,
+} from "@/lib/echo/dictation";
+
+describe("how long a pause ends dictation", () => {
+  it("is short at the start of a conversation and longer once it is deep", () => {
+    expect(QUIET_SECONDS_AT_START).toBe(2);
+    expect(QUIET_SECONDS_DEEP).toBe(5);
+    expect(quietSecondsFor(0)).toBe(2);
+    expect(quietSecondsFor(2)).toBe(2);
+    expect(quietSecondsFor(3)).toBe(5);
+    expect(quietSecondsFor(40)).toBe(5);
+  });
+});
 
 describe("joining spoken words onto what is already in the box", () => {
   it("starts a new message with a capital", () => {

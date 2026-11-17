@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Composer } from "@/components/chat/Composer";
 import { CrisisPanel } from "@/components/chat/CrisisPanel";
 import { Disclaimer } from "@/components/chat/Disclaimer";
+import { TurnOffer } from "@/components/chat/TurnOffer";
 import { PlanCards } from "@/components/PlanCards";
 import { EchoDots } from "@/components/EchoLoader";
 import { GENERIC_ERROR } from "@/lib/echo/messages";
@@ -141,6 +142,9 @@ export function Conversation({ initialTurns, initialPurchase = null }: Conversat
             </p>
           ) : null}
 
+          {/* Only at the start of a new conversation, never in the middle of one. */}
+          {empty ? <TurnOffer /> : null}
+
           <div className="flex flex-col gap-5">
             {turns.map((turn) => (
               <Turn key={turn.id} role={turn.role} text={turn.text} />
@@ -188,7 +192,11 @@ export function Conversation({ initialTurns, initialPurchase = null }: Conversat
       </div>
 
       <div className="sticky bottom-0 bg-page">
-        <Composer disabled={sending || purchase !== null} onSend={send} />
+        <Composer
+          disabled={sending || purchase !== null}
+          messagesSent={turns.filter((turn) => turn.role === "user").length}
+          onSend={send}
+        />
         <div className="flex items-center justify-center gap-3 pb-1">
           {turns.length > 0 ? (
             <a
